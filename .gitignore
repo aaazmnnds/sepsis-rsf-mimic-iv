@@ -1,0 +1,16 @@
+# Ignore everything by default
+*
+
+# Allow directories
+!*/
+
+# Allow Python and R scripts
+!*.py
+!*.R
+
+# Allow Documentation and Config
+!README.md
+!LICENSE
+!requirements.txt
+!.gitignore
+!GITHUB_UPLOAD_GUIDE.md
