@@ -180,17 +180,17 @@ python scripts/utils/regenerate_figure_b1.py
 
 ## Citation
 
-If you use this code or data, please cite:
+If you use the data extraction code or analysis pipeline from this repository, please cite our paper:
+
+> Nads A, et al. "Survival Analysis of Sepsis After Laparoscopic Surgery Using Random Survival Forests: A MIMIC-IV Database Study with Methodological Validation." (2026).
 
 ```bibtex
-@article{yourname2026sepsis,
+@article{nads2026sepsis,
   title={Survival Analysis of Sepsis After Laparoscopic Surgery Using Random Survival Forests: A MIMIC-IV Database Study with Methodological Validation},
-  author={Your Name and Collaborator Name},
-  journal={BMC Medical Research Methodology},
+  author={Nads, Azman and others},
+  journal={BMC Medical Research Methodology (Submitted)},
   year={2026},
-  volume={XX},
-  pages={XX--XX},
-  doi={10.XXXX/XXXXXX}
+  note={Under Review}
 }
 ```
 
@@ -207,8 +207,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 For questions or issues, please open a GitHub issue or contact:
-- **Primary Author:** [Your Email]
-- **Corresponding Author:** [Collaborator Email]
+- **Azman Nads:** azmannads@msutawi-tawi.edu.ph
 
 ---
 
