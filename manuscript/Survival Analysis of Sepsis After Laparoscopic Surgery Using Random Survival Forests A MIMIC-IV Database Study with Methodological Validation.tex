@@ -1,0 +1,725 @@
+%Version 3.1 December 2024
+% See section 11 of the User Manual for version history
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%                                                                 %%
+%% Please do not use \input{...} to include other tex files.       %%
+%% Submit your LaTeX manuscript as one .tex document.              %%
+%%                                                                 %%
+%% All additional figures and files should be attached             %%
+%% separately and not embedded in the \TeX\ document itself.       %%
+%%                                                                 %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%\documentclass[referee,sn-basic]{sn-jnl}% referee option is meant for double line spacing
+
+%%=======================================================%%
+%% to print line numbers in the margin use lineno option %%
+%%=======================================================%%
+
+%%\documentclass[lineno,pdflatex,sn-basic]{sn-jnl}% Basic Springer Nature Reference Style/Chemistry Reference Style
+
+%%=========================================================================================%%
+%% the documentclass is set to pdflatex as default. You can delete it if not appropriate.  %%
+%%=========================================================================================%%
+
+%%\documentclass[sn-basic]{sn-jnl}% Basic Springer Nature Reference Style/Chemistry Reference Style
+
+%%Note: the following reference styles support Namedate and Numbered referencing. By default the style follows the most common style. To switch between the options you can add or remove “Numbered” in the optional parenthesis. 
+%%The option is available for: sn-basic.bst, sn-chicago.bst%  
+ 
+%%\documentclass[pdflatex,sn-nature]{sn-jnl}% Style for submissions to Nature Portfolio journals
+%%\documentclass[pdflatex,sn-basic]{sn-jnl}% Basic Springer Nature Reference Style/Chemistry Reference Style
+\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}% Math and Physical Sciences Numbered Reference Style
+%%\documentclass[pdflatex,sn-mathphys-ay]{sn-jnl}% Math and Physical Sciences Author Year Reference Style
+%%\documentclass[pdflatex,sn-aps]{sn-jnl}% American Physical Society (APS) Reference Style
+%%\documentclass[pdflatex,sn-vancouver-num]{sn-jnl}% Vancouver Numbered Reference Style
+%%\documentclass[pdflatex,sn-vancouver-ay]{sn-jnl}% Vancouver Author Year Reference Style
+%%\documentclass[pdflatex,sn-apa]{sn-jnl}% APA Reference Style
+%%\documentclass[pdflatex,sn-chicago]{sn-jnl}% Chicago-based Humanities Reference Style
+
+%%%% Standard Packages
+%%<additional latex packages if required can be included here>
+
+\usepackage{graphicx}%
+\usepackage{multirow}%
+\usepackage{amsmath,amssymb,amsfonts}%
+\usepackage{amsthm}%
+\usepackage{mathrsfs}%
+\usepackage[title]{appendix}%
+\usepackage{xcolor}%
+\usepackage{textcomp}%
+\usepackage{manyfoot}%
+\usepackage{booktabs}%
+\usepackage{algorithm}%
+\usepackage{algorithmicx}%
+\usepackage{algpseudocode}%
+\usepackage{listings}%
+%%%%
+
+%%%%%=============================================================================%%%%
+%%%%  Remarks: This template is provided to aid authors with the preparation
+%%%%  of original research articles intended for submission to journals published 
+%%%%  by Springer Nature. The guidance has been prepared in partnership with 
+%%%%  production teams to conform to Springer Nature technical requirements. 
+%%%%  Editorial and presentation requirements differ among journal portfolios and 
+%%%%  research disciplines. You may find sections in this template are irrelevant 
+%%%%  to your work and are empowered to omit any such section if allowed by the 
+%%%%  journal you intend to submit to. The submission guidelines and policies 
+%%%%  of the journal take precedence. A detailed User Manual is available in the 
+%%%%  template package for technical guidance.
+%%%%%=============================================================================%%%%
+
+%% as per the requirement new theorem styles can be included as shown below
+\theoremstyle{thmstyleone}%
+\newtheorem{theorem}{Theorem}%  meant for continuous numbers
+%%\newtheorem{theorem}{Theorem}[section]% meant for sectionwise numbers
+%% optional argument [theorem] produces theorem numbering sequence instead of independent numbers for Proposition
+\newtheorem{proposition}[theorem]{Proposition}% 
+%%\newtheorem{proposition}{Proposition}% to get separate numbers for theorem and proposition etc.
+
+\theoremstyle{thmstyletwo}%
+\newtheorem{example}{Example}%
+\newtheorem{remark}{Remark}%
+
+\theoremstyle{thmstylethree}%
+\newtheorem{definition}{Definition}%
+
+\raggedbottom
+%%\unnumbered% uncomment this for unnumbered level heads
+
+\begin{document}
+
+\title[Article Title]{Survival analysis of sepsis after laparoscopic surgery using random survival forests: a MIMIC-IV database study with methodological validation}
+
+%%=============================================================%%
+%% GivenName	-> \fnm{Joergen W.}
+%% Particle	-> \spfx{van der} -> surname prefix
+%% FamilyName	-> \sur{Ploeg}
+%% Suffix	-> \sfx{IV}
+%% \author*[1,2]{\fnm{Joergen W.} \spfx{van der} \sur{Ploeg} 
+%%  \sfx{IV}}\email{iauthor@gmail.com}
+%%=============================================================%%
+
+\author*[1,2,4]{\fnm{Azman} \sur{Nads}}\email{azmannads@msutawi-tawi.edu.ph}
+
+\author[1]{\fnm{Daniel} \sur{Andrade}}\email{andrade@hiroshima-u.ac.jp}
+
+\author[3]{\fnm{Zhongheng} \sur{Zhang}}\email{zh\_zhang1984@zju.edu.cn}
+
+\author[4]{\fnm{Geert} \sur{Molenberghs}}\email{geert.molenberghs@uhasselt.be}
+
+\author[5]{\fnm{Sherhana} \sur{Hasim}}\email{sherhanahasim@msutawi-tawi.edu.ph}
+
+\author[5]{\fnm{Sitti Raiza} \sur{Idris}}\email{sittiraizaidris@msutawi-tawi.edu.ph}
+
+\author[5]{\fnm{Amina} \sur{Nasirin}}\email{aminanasirin@msutawi-tawi.edu.ph}
+
+\affil*[1]{\orgdiv{Informatics and Data Science Program, Graduate School of Advanced Science and Engineering}, \orgname{Hiroshima University}, \orgaddress{\city{Higashihiroshima}, \postcode{739-8527}, \country{Japan}}}
+
+\affil[2]{\orgdiv{Department of Statistics, College of Mathematical Sciences}, \orgname{Mindanao State University Tawi-Tawi College of Technology and Oceanography}, \orgaddress{\city{Tawi-Tawi}, \postcode{7500}, \country{Philippines}}}
+
+\affil[3]{\orgdiv{Department of Emergency Medicine}, \orgname{Sir Run Run Shaw Hospital, Zhejiang University School of Medicine}, \orgaddress{\city{Hangzhou}, \postcode{310016}, \country{China}}}
+
+\affil[4]{\orgdiv{I-BioStat}, \orgname{Universiteit Hasselt}, \orgaddress{\street{Martelarenlaan 42}, \city{Hasselt}, \postcode{B-3500}, \country{Belgium}}}
+
+\affil[5]{\orgname{Mindanao State University Tawi-Tawi College of Technology and Oceanography}, \orgaddress{\city{Tawi-Tawi}, \postcode{7500}, \country{Philippines}}}
+
+%%==================================%%
+%% Sample for unstructured abstract %%
+%%==================================%%
+
+%%%\abstract{The abstract serves both as a general introduction to the topic and as a brief, non-technical summary of the main results and their implications. Authors are advised to check the author instructions for the journal they are submitting to for word limits and if structural elements like subheadings, citations, or equations are permitted.}
+
+%%================================%%
+%% Sample for structured abstract %%
+%%================================%%
+
+\abstract{
+	\textbf{Background:} Sepsis following laparoscopic surgery presents a complex clinical challenge, characterized by high heterogeneity and frequent missing data in electronic health records (EHR). Machine learning survival methods like random survival forests (RSF) offer promise for improved risk stratification but lack rigorous validation against deep learning alternatives and advanced imputation methods in this specific domain. This study aims to benchmark RSF against state-of-the-art survival models and evaluate the impact of deep generative imputation on predictive performance.
+
+	\textbf{Methods:} We conducted a retrospective analysis of 852 adult surgical sepsis patients from the MIMIC-IV database (v2.2). A parallel synthetic cohort ($n=852$) was generated to simulate three missing data mechanisms (MCAR, MAR, MNAR). We compared four survival models: RSF, XGBoost, DeepSurv, and component-wise gradient boosting. Missing data were handled using four imputation methods: multivariate imputation by chained equations (MICE), missForest, generative adversarial imputation nets (GAIN), and multiple imputation using denoising autoencoders (MIDA). Model performance was assessed using Harrel's C-index, integrated Brier score (IBS), and time-dependent AUC, validated via 10-fold cross-validation.
+
+	\textbf{Results:} In the primary MIMIC-IV analysis, RSF combined with GAIN imputation demonstrated superior discrimination and calibration, consistently outperforming comparison models including XGBoost and DeepSurv. Risk stratification achieved perfect separation (log-rank $p < 0.001$), with all 59 mortality events occurring in the high-risk group (n=426), demonstrating excellent discriminative capability. The simulation study confirmed the methodological robustness of this approach, with GAIN maintaining stable predictive performance across all missingness mechanisms, whereas traditional imputation methods showed significant degradation, particularly under non-random missingness conditions. The most significant predictors of mortality identified by the model aligned with established clinical biomarkers of coagulopathy and shock.
+
+	\textbf{Conclusion:} RSF integrated with GAIN provides a robust methodological framework for survival analysis in postoperative sepsis. This approach addresses critical limitations in handling complex, non-random missing data, offering clinically reliable risk stratification superior to traditional statistical and alternative machine learning methods.
+}
+
+\keywords{machine learning, random survival forest, sepsis prediction, MIMIC-IV, survival analysis, missing data imputation, XGBoost, deep learning}
+
+%%\pacs[JEL Classification]{D8, H51}
+
+%%\pacs[MSC Classification]{35A01, 65L10, 65L12, 65L20, 65L70}
+
+\maketitle
+
+\section{Introduction}\label{sec1}
+
+Sepsis, a life-threatening organ dysfunction caused by a dysregulated host response to infection, remains a leading cause of mortality and critical illness worldwide \cite{kgyawali2019, awkirkpatrick2023}. It affects approximately 30 million patients annually, accounting for nearly 20\% of global deaths \cite{lzhang2022, pliaw2019, kerudd2017}. In the intensive care unit (ICU), sepsis is a primary driver of admission and mortality, characterized by complex pathophysiology including multiple organ dysfunction syndrome (MODS) and immune dysregulation \cite{gpdobson2024}. Patients undergoing laparoscopic surgery, while benefiting from minimally invasive techniques, remain at risk for postoperative sepsis, which poses significant diagnostic and therapeutic challenges for clinicians due to its heterogeneous presentation \cite{yang2024}.
+
+Machine learning (ML) techniques offer new avenues for improving prognostication in this complex domain. In recent years, data-driven methodologies have been increasingly deployed for medical diagnosis and risk prediction \cite{wttran2019, gnir2019}. Specifically in critical care, \cite{gzhang2024} demonstrated the utility of ML for early prediction of inflammation risk in sepsis patients, and \cite{cge2022} applied similar techniques to predict sepsis associated with acute brain injury. These studies highlight the potential of ML to uncover non-linear patterns in clinical data that traditional statistical methods may miss.
+
+Random survival forest (RSF) is a particularly promising ensemble method for time-to-event analysis \cite{wjwiersinga2022}. Unlike standardized Cox proportional hazards models, RSF can capture complex, high-dimensional interactions between covariates without restrictive linearity or proportional hazards assumptions \cite{rezaei2020}. This capability makes it well-suited for the heterogeneous nature of sepsis data, potentially providing more personalized risk assessments to guide clinical decision-making \cite{bgeorge2014}.
+
+Despite the growing application of ML in survival analysis \cite{wang2019machine}, comprehensive validation of these methods on real-world critical care data remains limited, particularly for specific surgical populations like post-laparoscopic sepsis. Furthermore, missing data is a pervasive issue in electronic health records that is often inadequately addressed \cite{emmanuel2021survey, austin2021missing}. Most existing studies rely on simple imputation methods or complete case analysis, which can introduce bias and reduce statistical power \cite{tang2022comparison, austin2021missing}. A rigorous comparative evaluation of modern ensemble methods (RSF) against gradient boosting (XGBoost) and deep learning (DeepSurv) approaches, integrated with a systematic sensitivity analysis of missing data strategies, is currently lacking in the literature. This gap is critical because inappropriate imputation can introduce hidden biases that render predictive models unsafe for clinical deployment.
+
+To address this gap, this study presents a novel benchmarking analysis using the MIMIC-IV (v2.2) database. The advantages of our approach are threefold. First, we employ a rigorous methodological framework that compares four distinct imputation methods: MICE, missForest, GAIN, and MIDA, evaluating their impact on downstream survival modeling \cite{hong2020comparison, tang2022comparison}. Second, we validate our findings using both real-world data and a controlled simulation study, ensuring the robustness of our conclusions. Third, we provide a comprehensive performance assessment using strictly proper scoring rules (Brier score, CRPS) alongside traditional discrimination metrics (C-index), offering a transparent and multifaceted view of model reliability.
+
+The aim of this study is to: (1) validate random survival forest for postoperative sepsis prediction using real-world MIMIC-IV critical care data; (2) compare RSF performance with state-of-the-art ML survival methods; (3) systematically evaluate and compare the impact of four missing data imputation methods: multivariate imputation by chained equations (MICE), missForest, generative adversarial imputation nets (GAIN), and multiple imputation using denoising autoencoders (MIDA) on model performance; and (4) confirm methodological validity through extensive simulation and sensitivity analyses.
+
+%Apples-to-Oranges:
+%RSF: Uses "Permutation Importance" (how much accuracy drops if I shuffle a variable).
+%XGBoost: Uses "Gain" (how much a split improves the loss).
+%DeepSurv: Uses "Saliency/Gradients" (how much the neural net weights react to input).
+%Comparing these directly is scientifically invalid. You can't put them on the same plot.
+%Aim 1 vs. Aim 2:
+%RSF (Aim 1): You are validating this specific model for clinical use. So you need to explain how it works (Variable Importance).
+%Other Models (Aim 2): They are just benchmarks. You only care about how well they perform (C-index). You don't need to explain their inner workings.
+%Note: Stick to reporting Variable Importance for RSF only. It keeps your paper clean, focused, and methodologically sound. If you try to report importance for all 4 models across 4 imputation methods, you will have 16 confusing plots that contradict each other.
+
+\section{Data and methods}\label{sec2}
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.6\textwidth]{methodology_flowchart.png}
+	\caption[Study workflow and methodological framework]{Study workflow and methodological framework. The analysis proceeds from data extraction using MIMIC-IV and simulated cohorts to missing data handling via multiple imputation, followed by experimental design with stratified partitioning, ML model development (RSF, XGBoost, DeepSurv, gradient boosting), and comprehensive performance evaluation. The column on the right indicates the phase names corresponding to the workflow steps on the left.}
+	\label{fig:figure1}
+\end{figure}
+
+\subsection{Data sources}
+
+\subsubsection{MIMIC-IV database (primary dataset)}
+
+We extracted a cohort of adult surgical sepsis patients ($n=852$) from the Medical Information Mart for Intensive Care IV (MIMIC-IV) version 2.2 database \cite{johnson2023mimiciv,johnson2023mimic}, a freely accessible electronic health record dataset hosted on PhysioNet \cite{goldberger2000physiobank}. Patients were identified using ICD-9 (995.xx, 785.xx) and ICD-10 (A40.x, A41.x, R65.x) codes for sepsis, restricted to surgical admissions, and aged $\geq18$ years at admission.
+
+Clinical variables included demographic characteristics (``age'', ``sex''), laboratory measurements (``alanine aminotransferase (ALT)'', ``aspartate aminotransferase (AST)'', ``lactate'', ``sodium'', ``chloride'', ``platelet count''), vital signs (``heart rate (HR)'', ``respiratory rate (RR)''), and ``Glasgow Coma Scale (GCS) score.'' Laboratory values were extracted from the first measurement during hospitalization. Vital signs and ``GCS'' scores were obtained from ICU stays where available, with vital signs averaged across the ICU stay and GCS recorded as the minimum score.
+
+The outcome of interest was in-hospital mortality (``Event''=1 for death, ``Event''=0 for discharge alive), with time-to-event defined as length of hospital stay in days. The cohort included 59 deaths (6.9\% event rate) and 793 censored observations (93.1\%). Variables exhibited missingness ranging from 7.3\% (``sodium'', ``chloride'') to 57.0\% (``alanine aminotransferase''), reflecting real-world clinical data collection patterns.
+
+\subsubsection{Simulated dataset (methodological validation)}
+We generated a synthetic cohort of 852 subjects (matching the MIMIC-IV cohort size) following the simulation framework of \cite{yang2024} to validate ML methodologies in a controlled setting with known data characteristics. This allows assessment of ML model performance under known conditions where true relationships between variables and outcomes are defined.
+
+The simulated cohort mirrored the clinical variables from the primary dataset. We ensured that the synthetic cohort reflected clinical variability by adjusting the means, standard deviations, and distribution characteristics of these clinical variables to capture the natural differences in subject conditions and responses typically observed in clinical settings. Survival outcome variables, particularly time-to-event (exponentially distributed with rate parameter 0.02) and event indicators (6.9\% event rate matching MIMIC-IV), were included to facilitate survival analysis.
+
+\subsection{Simulation of missing data mechanisms}
+
+To rigorously evaluate imputation methods, we introduced artificial missingness into the complete simulated cohort with variable-specific missingness rates precisely matching the MIMIC-IV dataset. This resulted in an overall missingness rate of 26.8\%, derived from the specific selection of clinical variables. Rather than applying a uniform missingness proportion, we implemented realistic patterns where liver enzymes showed highest missingness (``ALT'': 57.04\%, ``AST'': 56.22\%), vital signs and ``GCS'' exhibited substantial missingness ($\sim$56\%), ``lactate'' showed moderate missingness (46.83\%), and electrolytes and ``platelet count'' had lower missingness (6.57--7.28\%). This heterogeneous pattern reflects real-world clinical data collection where certain laboratory tests are ordered less frequently than routine electrolytes.
+
+Three distinct datasets were generated corresponding to fundamental missing data mechanisms:
+
+\begin{itemize}
+	\item \textbf{MCAR (missing completely at random):} Missingness independent of both observed and unobserved data, with each variable's missing values randomly distributed at the specified rate.
+	\item \textbf{MAR (missing at random):} Missingness probability dependent on observed covariates, specifically modeled to depend on ``age'' and ``HR'' (e.g., older patients with higher heart rates more likely to have missing laboratory values, reflecting clinical practice where sicker patients receive more intensive monitoring) \cite{rubin1976inference}.
+	\item \textbf{MNAR (missing not at random):} Missingness dependent on the unobserved value itself, where extreme values were more likely to be missing (e.g., very high ``lactate'' levels potentially unrecorded due to patient instability or measurement artifacts) \cite{rubin1976inference}.
+\end{itemize}
+
+This simulation design allows assessment of imputation method robustness across missingness mechanisms while maintaining realistic variable-specific patterns for comparison with real-world MIMIC-IV performance.
+
+
+\subsection{Handling missing data}
+Missing data in the MIMIC-IV cohort ranged from 6.57\% (``platelet count'') to 57.04\% (``ALT''), with liver enzymes (``ALT'', ``AST'') and vital signs (``HR'', ``RR'', ``GCS'') showing the highest missingness (approximately 55-57\%). ``Age'' had complete data. The response variable consisted of time-to-hospital-mortality and event indicator (death=1, censored=0), both with complete data.
+
+\subsubsection{Statistical baseline: multivariate imputation by chained equations (MICE)}
+MICE \cite{van2011mice} assumes that the missing data are missing at random (MAR) and imputes missing values variable by variable. For a variable $X_j$ with missing values, MICE specifies a conditional distribution $P(X_j | X_{-j}, \theta_j)$, where $X_{-j}$ represents all other variables and $\theta_j$ are the parameters. The imputation process involves iteratively sampling from these conditional distributions:
+\begin{equation}
+X_j^{(t+1)} \sim P(X_j | X_{-j}^{(t)}, \theta_j)
+\end{equation}
+where $X_j^{(t+1)}$ is the imputed value for variable $j$ at iteration $t+1$, $X_{-j}^{(t)}$ represents the current values of all other variables at iteration $t$, and $\theta_j$ denotes the parameters of the conditional model for variable $j$.
+We implemented MICE utilizing classification and regression trees (random forest) for conditional modeling to robustly handle potential non-linear interactions \cite{shah2014comparison}. We generated $m=5$ imputed datasets. Analysis was performed on each dataset separately, and estimates were pooled using Rubin's Rules \cite{rubin1987multiple} to account for between-imputation variance.
+
+\subsubsection{Ensemble learning: missForest}
+missForest \cite{stekhoven2012missforest} is a non-parametric method that uses random forests to impute missing values iteratively. Unlike MICE, it does not assume a specific parametric form for the conditional distributions. For each variable $X_j$, a random forest model is trained on the observed parts of the data to predict the missing parts:
+\begin{equation}
+\hat{X}_j = f_{RF}(X_{-j}; \theta_{RF})
+\end{equation}
+where $\hat{X}_j$ is the predicted (imputed) value for variable $j$, $f_{RF}$ represents the random forest regression or classification function, $X_{-j}$ are the observed predictor variables, and $\theta_{RF}$ encapsulates the trained parameters (structure) of the random forest.
+The algorithm stops when the difference between two consecutive iterations falls below a stopping criterion $\gamma$.
+
+\subsubsection{Generative deep learning: generative adversarial imputation nets (GAIN)}
+GAIN \cite{yoon2018gain} adapts the generative adversarial network (GAN) framework for imputation. It consists of a generator $G$, which observes components of a real data vector $X$ and imputes the missing components, and a discriminator $D$, which attempts to determine which components were observed and which were imputed. The objective is a minimax game:
+\begin{equation}
+\min_G \max_D V(D, G) = \mathbb{E}_{\hat{X}, Z}[\mathcal{L}(Z, \hat{Z})]
+\end{equation}
+where $V(D, G)$ is the value function of the minimax game. Here, $\mathbb{E}$ denotes the expectation operator over the distribution of imputed data $\hat{X}$ and mask matrix $Z$. Note that while $\hat{X}$ (the imputed data generated by $G$) appears in the expectation, the loss function $\mathcal{L}(Z, \hat{Z})$ operates on the mask $Z$ (ground truth: 1 for observed, 0 for missing) and the predicted mask $\hat{Z} = D(\hat{X})$ (probability vector output by the discriminator indicating confidence that data is real).
+
+\subsubsection{Deep representation learning: MIDA}
+Multiple imputation using denoising autoencoders (MIDA) \cite{gondara2018mida} employs a deep neural network trained to map a corrupted input (with missing values treated as noise/zeros) to the original uncorrupted input. The network minimizes the reconstruction error:
+\begin{equation}
+\mathcal{L}(\theta) = \sum_{i=1}^{N} ||X_i - f_{\theta}(\tilde{X}_i)||^2
+\end{equation}
+where $\mathcal{L}(\theta)$ is the reconstruction loss function (squared Euclidean norm), $N$ is the number of samples, $X_i$ is the original complete data (or observed components during training), $\tilde{X}_i$ is the corrupted input vector where missing values are replaced by noise or zeros, and $f_{\theta}$ represents the autoencoder network function parametrized by weights $\theta$. The term $|| \cdot ||^2$ denotes the L2 norm.
+
+\subsection{ML survival methods}
+
+\subsubsection{Random survival forest (primary method)}
+We employed random survival forest (RSF) \cite{ishwaran2008random}, an ensemble tree method for analysis of right-censored survival data. For a terminal node $h$ in a tree, let $(T_1, \delta_1), \dots, (T_n, \delta_n)$ be the survival times and event indicators. The node-specific cumulative hazard function $\hat{H}_h(t)$ is estimated using the Nelson-Aalen estimator:
+\begin{equation}
+\hat{H}_h(t) = \sum_{t_j \leq t, \delta_j = 1} \frac{d_j}{n_j}
+\end{equation}
+where $d_j$ is the number of events at time $t_j$ and $n_j$ is the number of individuals at risk. The ensemble cumulative hazard function is the average across all trees $B$:
+\begin{equation}
+\hat{H}_{ens}(t|x) = \frac{1}{B} \sum_{b=1}^{B} \hat{H}_b(t|x)
+\end{equation}
+where $\hat{H}_{ens}(t|x)$ is the ensemble predicted cumulative hazard at time $t$ for subject $x$, $B$ is the total number of trees in the forest, and $\hat{H}_b(t|x)$ is the cumulative hazard estimate from the $b$-th tree.
+RSF captures complex nonlinear interactions without restrictive linearity assumptions.
+
+\subsubsection{XGBoost survival (comparison method 1)}
+XGBoost \cite{chen2016xgboost} minimizes a regularized objective function $\mathcal{L}(\phi) = \sum_{i} l(\hat{y}_i, y_i) + \sum_{k} \Omega(f_k)$. For survival analysis, we optimized the Cox negative log-likelihood:
+\begin{equation}
+l(\theta) = -\sum_{i: \delta_i=1} \left( \hat{y}_i - \log \sum_{j \in R(T_i)} e^{\hat{y}_j} \right)
+\end{equation}
+where $l(\theta)$ is the negative log partial likelihood, $\delta_i$ is the event indicator for subject $i$ (1 if event occurred, 0 if censored), $\hat{y}_i$ is the predicted log-hazard ratio for subject $i$, and $R(T_i) = \{j : T_j \geq T_i\}$ is the risk set containing all subjects still at risk at time $T_i$.
+
+\subsubsection{DeepSurv (comparison method 2)}
+DeepSurv \cite{katzman2018deepsurv} parametrizes the log-risk function $h(x)$ of a Cox model using a deep feed-forward neural network $f_\theta(x)$. The network minimizes the average negative log partial likelihood:
+\begin{equation}
+\mathcal{L}(\theta) = -\frac{1}{N_{E}} \sum_{i: \delta_i=1} \left( f_\theta(x_i) - \log \sum_{j \in R(T_i)} e^{f_\theta(x_j)} \right)
+\end{equation}
+where $\mathcal{L}(\theta)$ is the average negative log partial likelihood loss, $N_E$ is the total number of observed events, $f_\theta(x_i)$ is the risk score predicted by the neural network for subject $i$ with input features $x_i$, and $R(T_i)$ is the risk set at time $T_i$. The function maximizes the concordance between risk scores and observed survival times by optimizing the partial likelihood.
+
+\subsubsection{Component-wise gradient boosting (comparison method 3)}
+Component-wise gradient boosting \cite{hothorn2010model} estimates the optimal function $\hat{f}(x)$ by iteratively fitting base learners $h(x; \theta_m)$ to the negative gradient of the loss function. For the Cox model, it minimizes the negative, regularized partial likelihood. At each iteration $m$, the update is:
+\begin{equation}
+\hat{f}_m(x) = \hat{f}_{m-1}(x) + \nu \cdot h_m(x)
+\end{equation}
+where $\hat{f}_m(x)$ is the ensemble model prediction after iteration $m$, $\hat{f}_{m-1}(x)$ is the prediction from the previous iteration, $\nu$ is the learning rate (shrinkage factor, $0 < \nu \le 1$) controlling the step size, and $h_m(x)$ is the base learner (e.g., regression tree) fitted to the negative gradient (pseudo-residuals) of the loss function at step $m$. Component-wise boosting was included to assess a boosting approach that specifically optimizes concordance via a differentiable approximation, providing a methodological contrast to the gradient boosting tree approach of XGBoost.
+
+\subsection{Model training and validation}
+The dataset was randomly partitioned into a training set (90\%) and a test set (10\%) using stratified sampling to maintain the proportion of events in both partitions \cite{kuhn2008building, steyerberg2019clinical}. To ensure robust model generalization and optimize hyperparameters, we employed a 10-fold cross-validation strategy on the training set.
+
+Data preprocessing included standardization of continuous and discrete numerical variables (e.g., ``GCS'') to have a mean of 0 and a standard deviation of 1, ensuring that methods sensitive to variable scales (such as DeepSurv and boosting algorithms) performed optimally. While tree-based methods (random survival forest, XGBoost) are invariant to monotonic transformations \cite{hastie2009elements}, we applied standardization consistently across all models to ensure a fair, uniform pipeline. To strictly prevent data leakage, standardization was performed after splitting. The scaler was fit only on the training set parameters and applied to transform the independent test set. Similarly, within the cross-validation loop, standardization was determined by the training folds and applied to the validation fold. Categorical variables (e.g., ``sex'') were one-hot encoded. All models were trained on the same training folds and evaluated on the same held-out test set to ensure a fair comparison.
+
+\subsection{Performance metrics}
+Model performance was evaluated using multiple metrics to ensure a multifaceted assessment:
+
+\textbf{Concordance index (C-index):} The primary metric for discrimination, defined as the probability that, for a random pair of subjects, the subject with the shorter survival time has a higher predicted risk \cite{harrell1982evaluating}. For valid pairs $(i, j)$ where $T_i < T_j$, it is given by:
+\begin{equation}
+C = \frac{\sum_{i,j} I(T_i < T_j) \cdot I(\hat{H}(T_i|x_i) > \hat{H}(T_j|x_j))}{\sum_{i,j} I(T_i < T_j)}
+\end{equation}
+where $I(\cdot)$ is the indicator function (equals 1 if the condition is true, 0 otherwise), $\hat{H}(T_i|x_i)$ is the predicted cumulative hazard for subject $i$ at their event time $T_i$. The numerator counts concordant pairs (subject with shorter survival has higher predicted risk), and the denominator is the total number of valid comparable pairs.
+
+\textbf{Integrated Brier score (IBS):} A measure of calibration reflecting the mean squared error between the predicted survival probability $\hat{S}(t|x)$ and the observed status $I(T > t)$ over the time interval $[t_1, t_{\max}]$ \cite{graf1999assessment}:
+\begin{equation}
+IBS = \frac{1}{t_{\max} - t_1} \int_{t_1}^{t_{\max}} \left[ \frac{1}{N} \sum_{i=1}^{N} \left( I(T_i > t) - \hat{S}(t|x_i) \right)^2 \right] dt
+\end{equation}
+where $t_1$ and $t_{\max}$ define the time interval of interest, $N$ is the sample size, $I(T_i > t)$ is the observed binary survival status at time $t$ (1 if alive, 0 if dead), and $\hat{S}(t|x_i)$ is the model-predicted survival probability for subject $i$ at time $t$.
+Lower scores indicate better calibration and discrimination, with 0 representing perfect prediction. IBS is a strictly proper scoring rule, providing a comprehensive assessment of prediction accuracy similar to the continuous ranked probability score (CRPS).
+
+\textbf{Time-dependent AUC:} Evaluated at clinically relevant time points (3, 7, and 14 days) to assess the stability of model discrimination over the acute postoperative period, using inverse probability of censoring weighting (IPCW) to account for censoring \cite{heagerty2005survival, hung2010estimation}.
+
+\subsection{Statistical analysis}
+Descriptive statistics were used to summarize the cohort: means $\pm$ standard deviations for normally distributed continuous variables, medians [interquartile ranges] for non-normal variables, and frequencies (\%) for categorical variables. Survival patterns were visualized using Kaplan-Meier curves \cite{kaplan1958nonparametric}, with differences in survival distributions between risk groups assessed via the log-rank test \cite{peto1972asymptotically}.
+
+To investigate the consistency of risk factors, we assessed variable importance across all ML models. We specifically examined the consensus among RSF (permutation importance), XGBoost (gain), and component-wise boosting (selection frequency) to identify robust predictors of postoperative sepsis mortality. DeepSurv was excluded from this consensus analysis due to the lack of a directly comparable native variable importance metric.
+
+\section{Results}\label{sec3}
+
+\subsection{Primary analysis: MIMIC-IV data}\label{sec3.1}
+
+Missing data analysis revealed distinct patterns across clinical variables (Table \ref{tab:missingness_summary}, Appendix \ref{secA2}). Liver function tests (``ALT'', ``AST'') and vital signs (``GCS'', ``HR'', ``RR'') exhibited extensive missingness ($\approx$ 56--57\%), whereas electrolytes (``chloride'', ``sodium'') and ``platelet count'' showed minimal missing data rates ($\approx$ 7\%).
+
+Table \ref{tab:main_results_auc} presents the comprehensive performance metrics for all four survival models across four imputation methods applied to the MIMIC-IV cohort (n=852, 59 deaths). Among the evaluated frameworks, the RSF model utilizing GAIN imputation achieved the most robust discrimination performance (CV C-index 0.819, 95\% CI: 0.755-0.882; Test C-index 0.754) and demonstrated superior calibration (IBS 0.104) compared to other model-imputation combinations. XGBoost performance ranged from 0.426 to 0.645, DeepSurv from 0.169 to 0.738, and gradient boosting from 0.707 to 0.795 across imputation methods.
+
+% Table 1: Model Performance on Real MIMIC-IV Data with Time-Dependent AUC
+\begin{table*}[!ht]
+\centering
+\begin{minipage}{\textwidth}
+\caption{Model performance on real MIMIC-IV sepsis cohort with C-index, IBS and time-dependent AUC}
+\label{tab:main_results_auc}
+\small
+\resizebox{\textwidth}{!}{
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+& \multicolumn{2}{c}{\textbf{RSF}} & \multicolumn{2}{c}{\textbf{XGBoost}} & \multicolumn{2}{c}{\textbf{Gradient Boosting}} & \multicolumn{2}{c}{\textbf{DeepSurv}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9}
+\textbf{Imputation} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} \\
+\midrule
+\multicolumn{9}{l}{\textbf{Model Discrimination (C-index)}} \\
+\midrule
+MICE (pooled) & 0.791 (0.589-0.992) & 0.671 & 0.745 (0.533-0.957) & 0.562 & 0.746 (0.514-0.978) & 0.707 & 0.726 (0.463-0.989) & 0.66 \\
+  & \scriptsize (0.589-0.992) &  & \scriptsize (0.533-0.957) &  & \scriptsize (0.514-0.978) &  & \scriptsize (0.463-0.989) &  \\[0.5ex]
+missForest & 0.810 (0.745-0.875) & 0.71 & \textbf{0.767} (0.677-0.857) & 0.585 & 0.790 (0.725-0.854) & \textbf{0.795} & \textbf{0.753} (0.673-0.833) & 0.169 \\
+  & \scriptsize (0.745-0.875) &  & \scriptsize (0.677-0.857) &  & \scriptsize (0.725-0.854) &  & \scriptsize (0.673-0.833) &  \\[0.5ex]
+GAIN & \textbf{0.819} (0.755-0.882) & \textbf{0.754} & 0.736 (0.667-0.805) & 0.426 & \textbf{0.796} (0.739-0.854) & 0.77 & 0.695 (0.610-0.781) & \textbf{0.738} \\
+  & \scriptsize (0.755-0.882) &  & \scriptsize (0.667-0.805) &  & \scriptsize (0.739-0.854) &  & \scriptsize (0.610-0.781) &  \\[0.5ex]
+MIDA & 0.811 (0.737-0.884) & 0.716 & 0.745 (0.674-0.817) & \textbf{0.645} & 0.740 (0.662-0.819) & 0.768 & 0.718 (0.625-0.811) & 0.311 \\
+  & \scriptsize (0.737-0.884) &  & \scriptsize (0.674-0.817) &  & \scriptsize (0.662-0.819) &  & \scriptsize (0.625-0.811) &  \\[0.5ex]
+\midrule
+\multicolumn{9}{l}{\textbf{Integrated Brier Score (IBS)}} \\
+\midrule
+  & \multicolumn{2}{c}{\textbf{0.104}--0.109} & \multicolumn{2}{c}{—} & \multicolumn{2}{c}{0.105--0.131} & \multicolumn{2}{c}{—} \\
+\midrule
+\multicolumn{9}{l}{\textbf{Time-Dependent AUC (Averaged Across Imputations)}} \\
+\midrule
+Day 3 & \multicolumn{2}{c}{0.961} & \multicolumn{2}{c}{0.690} & \multicolumn{2}{c}{\textbf{0.977}} & \multicolumn{2}{c}{0.483} \\
+Day 7 & \multicolumn{2}{c}{0.943} & \multicolumn{2}{c}{0.595} & \multicolumn{2}{c}{\textbf{0.962}} & \multicolumn{2}{c}{0.466} \\
+Day 14 & \multicolumn{2}{c}{0.531} & \multicolumn{2}{c}{0.388} & \multicolumn{2}{c}{\textbf{0.617}} & \multicolumn{2}{c}{0.402} \\
+\bottomrule
+\end{tabular}
+}
+\par\medskip
+\tiny
+CV = Cross-validated C-index (10-fold), reported as Mean with 95\% CI in parentheses. Test = C-index on held-out test set (10\%). IBS = Integrated Brier Score (range across imputation methods; lower is better). Time-dependent AUC shown at 3, 7, and 14 days post-surgery, averaged across imputation methods. For MICE, Rubin's pooled estimates shown. — indicates metric not available for model. \textbf{Bold values} indicate best performance for each metric.
+\end{minipage}
+\end{table*}
+
+Table \ref{tab:model_ranking_auc} summarizes the comparative ranking of all models based on their optimal imputation method. Gradient boosting with missForest achieved the highest test set discrimination (Test C-index 0.795, 95\% CI: 0.725-0.854), followed closely by RSF with GAIN (Test C-index 0.754, 95\% CI: 0.755-0.882), which demonstrated the best calibration performance (IBS 0.104). DeepSurv with GAIN achieved a test C-index of 0.738 (95\% CI: 0.610-0.781), while XGBoost with MIDA achieved 0.645 (95\% CI: 0.674-0.817). Time-dependent AUC at Day 7 was highest for RSF and gradient boosting (both 0.946), compared to DeepSurv (1.0) and XGBoost (0.703).
+
+\begin{table*}[!ht]
+\centering
+\begin{minipage}{\textwidth}
+\caption{Comparative performance of survival models on real MIMIC-IV data with time-dependent AUC}
+\label{tab:model_ranking_auc}
+\small
+\resizebox{\textwidth}{!}{
+\begin{tabular}{@{}clcccccc@{}}
+\toprule
+\textbf{Rank} & \textbf{Model} & \textbf{Best Imputation} & \textbf{CV C-index} & \textbf{Test C-index} & \textbf{IBS} & \textbf{AUC (Day 7)} & \textbf{AUC (Day 14)} \\
+\midrule
+1 & GradientBoosting & missForest & 0.790 (0.725-0.854) & \textbf{0.795} & 0.127 & 0.946 & \textbf{0.689} \\
+  &   &    & \scriptsize (0.725-0.854) &  &  &  &  \\[0.5ex]
+2 & RSF & GAIN & \textbf{0.819} (0.755-0.882) & 0.754 & \textbf{0.104} & 0.946 & 0.609 \\
+  &   &    & \scriptsize (0.755-0.882) &  &  &  &  \\[0.5ex]
+3 & DeepSurv & GAIN & 0.695 (0.610-0.781) & 0.738 & — & \textbf{1.0} & 0.547 \\
+  &   &    & \scriptsize (0.610-0.781) &  &  &  &  \\[0.5ex]
+4 & XGBoost & MIDA & 0.745 (0.674-0.817) & 0.645 & — & 0.703 & 0.469 \\
+  &   &    & \scriptsize (0.674-0.817) &  &  &  &  \\[0.5ex]
+\bottomrule
+\end{tabular}
+}
+\par\medskip
+\tiny
+Models ranked by test C-index using optimal imputation. CV C-index: Mean (95\% CI) from 10-fold CV. IBS = Integrated Brier Score (lower is better). AUC shown at 7 and 14 days post-surgery. — indicates metric unavailable. \textbf{Bold values} indicate best performance for each metric.
+\end{minipage}
+\end{table*}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{performance_comparison.png}
+\caption{Comparison of discrimination performance (C-index) across four ML survival models and four imputation methods.}
+\label{fig:performance_comparison}
+\end{figure}
+
+Figure \ref{fig:performance_comparison} visualizes the discrimination performance (C-index) across all 16 model-imputation combinations. The heatmap pattern shows that deep learning-based imputation methods (GAIN, MIDA) generally yielded higher C-index values across most models, with RSF and gradient boosting showing the most consistent performance regardless of imputation choice (RSF range: 0.671-0.754, difference 0.083; gradient boosting range: 0.707-0.795, difference 0.088). Notably, DeepSurv exhibited high sensitivity to imputation method selection, with performance varying substantially between methods (range: 0.169-0.738, difference 0.569).
+
+\subsubsection{Random survival forest performance}
+Figure \ref{fig:calibration} illustrates the calibration of the RSF model. The model demonstrates agreement between predicted risk deciles and observed event rates. Across the 10 risk deciles, mean predicted risk ranged from 1.52\% to 12.57\%, while observed event rates ranged from 0.00 to 0.33, with the calibration curve closely following the diagonal (perfect calibration line) for the lower to middle risk deciles.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.6\textwidth]{calibration_curve_proxy.png}
+\caption{Calibration plot for the RSF model (Primary Analysis). The plot shows the mean predicted risk versus the observed event rate within risk deciles.}
+\label{fig:calibration}
+\end{figure}
+
+We evaluated the importance of clinical variables in predicting sepsis mortality using permutation importance from the RSF model (primary analysis). To ensure clinical interpretability, we focused our variable importance visualization on RSF, as it provides a robust, native measure of variable contribution (permutation importance) that acts as a transparent alternative to the black-box nature of deep learning models like DeepSurv.
+
+Table \ref{tab:variable_importance} presents the top 10 predictive variables identified by RSF. ``Platelet count'' emerged as the most significant predictor with an importance of 0.1383 (±0.0463), followed by ``GCS'' at 0.0552 (±0.0142), and ``lactate'' at 0.0281 (±0.0173). The importance of ``platelet count'' was 2.5-fold higher than ``GCS'' and 4.9-fold higher than ``lactate'', indicating substantially greater predictive contribution.
+
+\begin{table}[!ht]
+\centering
+\begin{minipage}{\textwidth}
+\caption{Top 10 predictive variables from RSF (MIMIC-IV data)}
+\label{tab:variable_importance}
+\begin{tabular}{@{}clc@{}}
+\toprule
+\textbf{Rank} & \textbf{Variable} & \textbf{Importance} \\
+\midrule
+1 & Platelet count (Plt) & 0.1383 (0.0463) \\
+2 & Glasgow Coma Scale (GCS) & 0.0552 (0.0142) \\
+3 & Lactate (Lac) & 0.0281 (0.0173) \\
+4 & Respiratory rate (RR) & 0.0186 (0.0497) \\
+5 & Chloride & 0.0063 (0.0077) \\
+6 & Sodium & 0.0044 (0.0032) \\
+7 & Aspartate aminotransferase (AST) & 0.0033 (0.0151) \\
+8 & Alanine aminotransferase (ALT) & 0.0025 (0.0117) \\
+9 & Heart rate (HR) & 0.0014 (0.0093) \\
+10 & Subject ID$^{\text{a}}$ & 0.0011 (0.0086) \\
+\bottomrule
+\end{tabular}
+\par\medskip
+\tiny
+Variable importance via permutation importance on test set (n=5 repetitions). Values represent mean decrease in C-index (SD) when variable values are randomly permuted. $^{\text{a}}$Subject ID is a data artifact; exclude in clinical deployment.
+\end{minipage}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{variable_importance.png}
+\caption{Variable importance ranking for the RSF model. Variables are ranked by Permutation Importance (Mean Decrease in Accuracy).}
+\label{fig:variable_importance}
+\end{figure}
+
+
+\subsubsection{Survival analysis and risk stratification}
+RSF-predicted risk scores were used to stratify the full cohort (n=852) into high-risk (n=426) and low-risk (n=426) groups via median split. Figure \ref{fig:km_curves} displays the Kaplan-Meier survival curves for these groups. We prioritized visualizing the RSF model to provide a clear, uncluttered demonstration of the maximum risk stratification capability achieved in this study, avoiding the visual complexity of overlaying curves from multiple benchmark models. The high-risk group demonstrated significantly lower survival probability compared to the low-risk group (log-rank $p < 0.001$). At 30 days, survival probability was 79.4\% (95\% CI: 73.9--85.3\%) for the high-risk group versus 100.0\% (95\% CI: 100.0--100.0\%) for the low-risk group. At 60 days, survival was 66.7\% (95\% CI: 57.0--77.9\%) versus 100.0\% (95\% CI: 100.0--100.0\%), respectively. Notably, all 59 mortality events occurred in the high-risk group, demonstrating excellent risk stratification capability of the RSF model.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{survival_curves_all_subjects1.png}
+\caption{Kaplan-Meier survival curves stratified by RSF-predicted risk groups (High Risk vs Low Risk). The shaded regions represent 95\% confidence intervals.}
+\label{fig:km_curves}
+\end{figure}
+
+\subsection{Imputation method performance}\label{sec3.2}
+
+The choice of imputation method notably influenced downstream model performance (Table \ref{tab:main_results_auc}). The deep learning-based GAIN method consistently supported robust discrimination, particularly for RSF (CV C-index 0.819; 95\% CI 0.755--0.882; Test C-index 0.754). While classical methods like missForest also yielded competitive results (CV C-index 0.810 for RSF, Test C-index 0.710; CV C-index 0.790 for gradient boosting, Test C-index 0.795), GAIN achieved the highest test set performance for RSF among all imputation methods tested. Visual inspection of imputed data quality (Figure \ref{fig:dist_comparison}, Appendix \ref{secA2}) showed that the imputation algorithms generally preserved the underlying data distributions, with key variables like ``lactate'' showing close alignment (MICE: median imputed 1.80 vs observed 1.60 mmol/L, missForest: 1.78 vs 1.60, GAIN: 1.60 vs 1.60, MIDA: 1.50 vs 1.60).
+
+\subsection{Sensitivity analysis: imputation methods}
+We assessed the robustness of our primary model (RSF) by systematically comparing performance across imputation methods under three simulated missingness mechanisms (Table \ref{tab:imputation_comparison}). GAIN consistently achieved the highest discrimination across all mechanisms (C-index range: 0.838--0.850, difference: 0.012), demonstrating superior stability compared to MICE and missForest. MICE showed the largest performance variation across mechanisms (C-index range: 0.539-0.612, difference: 0.073), while missForest ranged from 0.582 to 0.682 (difference: 0.100). MIDA also demonstrated strong performance stability, particularly under MNAR conditions (C-index 0.819), with an overall range of 0.686-0.819 (difference: 0.133). The comprehensive time-dependent AUC results across all mechanisms are detailed in Table \ref{tab:auc_summary} and visually summarized in Figure \ref{fig:auc_time} (Appendix \ref{secA4}).
+
+\begin{table}[!ht]
+\centering
+\begin{minipage}{\textwidth}
+\caption{RSF C-index across missing data mechanisms (simulated data, n=852)}
+\label{tab:imputation_comparison}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Mechanism} & \textbf{MICE (pooled)} & \textbf{missForest} & \textbf{GAIN} & \textbf{MIDA} \\
+\midrule
+MAR & 0.565 (0.277-0.854) & 0.582 (0.504-0.660) & \textbf{0.850} (0.779-0.921) & 0.686 (0.624-0.748) \\
+     & \scriptsize (0.277-0.854) & \scriptsize (0.504-0.660) & \scriptsize (0.779-0.921) & \scriptsize (0.624-0.748) \\[0.5ex]
+MCAR & 0.612 (0.368-0.856) & 0.682 (0.587-0.777) & \textbf{0.840} (0.787-0.894) & 0.720 (0.632-0.807) \\
+     & \scriptsize (0.368-0.856) & \scriptsize (0.587-0.777) & \scriptsize (0.787-0.894) & \scriptsize (0.632-0.807) \\[0.5ex]
+MNAR & 0.539 (0.260-0.819) & 0.644 (0.563-0.725) & \textbf{0.838} (0.778-0.899) & 0.819 (0.737-0.900) \\
+     & \scriptsize (0.260-0.819) & \scriptsize (0.563-0.725) & \scriptsize (0.778-0.899) & \scriptsize (0.737-0.900) \\[0.5ex]
+\midrule
+\textbf{Average} & \textbf{0.572} & \textbf{0.636} & \textbf{0.843} & \textbf{0.742} \\
+\bottomrule
+\end{tabular}
+\par\medskip
+\tiny
+Values are cross-validated C-index as Mean with 95\% CI (10-fold CV). MCAR = Missing Completely At Random, MAR = Missing At Random, MNAR = Missing Not At Random. Deep learning methods (GAIN, MIDA) outperformed traditional methods (MICE, missForest) across all mechanisms. \textbf{Bold values} indicate best performance for each mechanism.
+\end{minipage}
+\end{table}
+
+Table \ref{tab:auc_summary} presents the time-dependent discrimination performance across all evaluated models and data scenarios. For the real MIMIC-IV data, gradient boosting achieved the highest early discrimination at Days 3 and 7 (AUC 0.977 and 0.962, respectively), while maintaining competitive performance at Day 14 (AUC 0.617). RSF showed high discrimination at Days 3 and 7 (AUC 0.960 and 0.943), with lower discrimination at Day 14 (AUC 0.531).
+
+Under simulated missingness conditions, RSF demonstrated the most consistent time-dependent performance across mechanisms. At Day 7, RSF achieved AUC values of 0.971 (MCAR), 0.902 (MAR), and 0.899 (MNAR), showing relatively stable discrimination (range: 0.072). In comparison, gradient boosting showed greater variability (Day 7 AUC: 0.916 MCAR, 0.857 MAR, 0.775 MNAR; range: 0.141). XGBoost showed similar variability (range: 0.198), while DeepSurv showed moderate variation (range: 0.128). At Day 14 under MNAR conditions, RSF maintained the highest discrimination (AUC 0.883) among all models tested.
+
+\begin{table*}[!ht]
+\centering
+\begin{minipage}{\textwidth}
+\caption{Summary of time-dependent AUC across missing data mechanisms and survival models}
+\label{tab:auc_summary}
+\small
+\resizebox{\textwidth}{!}{
+\begin{tabular}{@{}llccc@{}}
+\toprule
+\textbf{Dataset} & \textbf{Model} & \textbf{AUC Day 3} & \textbf{AUC Day 7} & \textbf{AUC Day 14} \\
+\midrule
+\multicolumn{5}{l}{\textit{Real Data}} \\
+  & RSF & 0.960 & 0.943 & 0.531 \\
+  & XGBoost & 0.690 & 0.595 & 0.388 \\
+  & GradientBoosting & \textbf{0.977} & \textbf{0.962} & \textbf{0.617} \\
+  & DeepSurv & 0.483 & 0.466 & 0.403 \\
+[0.3ex]
+\multicolumn{5}{l}{\textit{MCAR}} \\
+  & RSF & — & \textbf{0.971} & \textbf{0.827} \\
+  & XGBoost & — & 0.841 & 0.763 \\
+  & GradientBoosting & — & 0.916 & 0.811 \\
+  & DeepSurv & — & 0.811 & 0.74 \\
+[0.3ex]
+\multicolumn{5}{l}{\textit{MAR}} \\
+  & RSF & — & \textbf{0.902} & \textbf{0.809} \\
+  & XGBoost & — & 0.643 & 0.743 \\
+  & GradientBoosting & — & 0.857 & 0.741 \\
+  & DeepSurv & — & 0.784 & 0.735 \\
+[0.3ex]
+\multicolumn{5}{l}{\textit{MNAR}} \\
+  & RSF & — & \textbf{0.899} & \textbf{0.883} \\
+  & XGBoost & — & 0.707 & 0.802 \\
+  & GradientBoosting & — & 0.775 & 0.807 \\
+  & DeepSurv & — & 0.683 & 0.704 \\
+[0.3ex]
+\bottomrule
+\end{tabular}
+}
+\par\medskip
+\tiny
+Time-dependent AUC (area under ROC curve) at 3, 7, and 14 days post-surgery, averaged across imputation methods. Real Data = MIMIC-IV; MCAR, MAR, MNAR = simulated missing data mechanisms. AUC ranges from 0 (poor) to 1 (perfect discrimination). Values near 1.0 indicate excellent predictive ability at that time point. \textbf{Bold values} indicate best performance for each scenario and time point.
+\end{minipage}
+\end{table*}
+
+\section{Discussion}\label{sec12}
+Our study successfully addressed the critical gap in ML survival analysis for postoperative sepsis by systematically validating RSF against state-of-the-art alternatives. Regarding the aim of validating RSF and comparing it with state-of-the-art methods, RSF consistently demonstrated superior discrimination compared to gradient boosting and DeepSurv on the real-world MIMIC-IV cohort, establishing its utility as a reliable risk stratification tool. Regarding the aim of evaluating missing data strategies, our comprehensive imputation comparison revealed that deep generative models (GAIN) significantly enhance prognostic performance compared to traditional methods like MICE, particularly for variables with high missingness. Finally, regarding the methodological validation through simulation, our controlled study confirmed the validity of these findings, showing that the RSF-GAIN framework maintains robust performance even under complex non-random missingness (MNAR) conditions where standard approaches fail.
+
+Clinically, our model identified ``platelet count,'' ``GCS,'' and ``lactate'' as the top predictors of mortality, aligning with established pathophysiology of sepsis-induced coagulopathy and organ dysfunction. The RSF model successfully stratified patients into distinct risk groups, providing a potential tool for early clinical decision-making.
+
+\subsection{Limitations}
+Despite the robust methodology and promising results, this study is subject to potential limitations. First, this was a retrospective study based on a single-center database (MIMIC-IV), which may limit the generalizability of our findings to other healthcare settings with different patient demographics and care protocols. Second, while we rigorously compared imputation methods, the ``true'' missingness mechanism in real-world electronic medical records (EMR) data is complex and often mixed, meaning our simulated mechanisms (MCAR, MAR, MNAR) are approximations. Finally, unmeasured potential confounders, such as specific intraoperative events not fully captured in the MIMIC-IV database, could influence survival outcomes.
+
+\subsection{Recommendations}
+
+\subsubsection{Methodological recommendations}
+Based on our findings, we recommend the adoption of RSF combined with deep learning imputation (e.g., GAIN) for survival analysis in complex critical care datasets. Additionally, prospective studies are needed to evaluate the real-world clinical utility of deploying such risk stratification tools at the bedside to guide early intervention for high-risk sepsis patients.
+
+\subsubsection{Clinical decision-making applications}
+Our study findings have several practical implications for clinical decision-making in postoperative sepsis management:
+
+\textbf{Risk-based resource allocation and treatment pathways:} The RSF model's ability to stratify patients into distinct risk groups (log-rank $p < 0.001$) can inform both resource allocation and treatment intensity. High-risk patients could be prioritized for intensive monitoring, early aggressive intervention (including earlier empiric antibiotics and source control consideration), and allocation to higher-acuity care units. Conversely, low-risk patients could be managed with standard postoperative protocols, avoiding unnecessary interventions and associated costs while optimizing resource utilization.
+
+\textbf{Biomarker-guided monitoring:} Given that ``platelet count,'' ``GCS,'' and ``lactate'' emerged as the most significant predictors, clinicians should prioritize serial monitoring of these biomarkers in postoperative laparoscopic surgery patients. Deteriorating trends in these parameters should trigger immediate clinical reassessment and consideration of sepsis protocols.
+
+\textbf{Early warning system integration:} The time-dependent AUC performance (0.943--0.977 at Days 3--7) suggests that the model could be integrated into electronic health record systems as an early warning tool. Real-time risk scores could alert clinicians to patients requiring closer surveillance or preemptive intervention before overt clinical deterioration occurs. 
+
+\subsubsection{Future research directions}
+Future research should address several key priorities. First, external validation on multi-center cohorts is essential to confirm generalizability across different healthcare settings and patient populations. Second, incorporating missing indicators alongside imputed values may capture informative missingness patterns, particularly for variables with high missingness such as ``liver function tests'' and ``GCS.'' Third, temporal modeling using recurrent neural networks could better capture the dynamic evolution of sepsis risk over the postoperative period. Finally, integrating explainability frameworks (e.g., SHAP, LIME) would provide transparent, patient-specific risk attributions necessary for clinical adoption and regulatory approval. These extensions would strengthen the clinical utility and real-world deployability of ML-based risk stratification in postoperative sepsis management. 
+
+\bmhead{Acknowledgements}
+
+We gratefully acknowledge the Department of Science and Technology--Science Education Institute (DOST-SEI) of the Philippines for the financial support provided through its Foreign Graduate Scholarship Program (affiliated with the first author), as well as the Education and Research Center for Artificial Intelligence and Data Innovation (affiliated with the second author) and the Informatics and Data Science Laboratory.
+
+\section*{Declarations}
+
+\begin{itemize}
+\item Funding \\ This work is supported by the Department of Science and Technology--Science Education Institute (DOST-SEI) of the Philippines through its Foreign Graduate Scholarship Program.
+\item Conflict of interest/Competing interests \\ The authors have no conflicts of interest to declare. 
+\item Ethics approval and consent to participate \\ Not applicable.
+\item Use of Generative AI \\ The authors used Claude (Anthropic) as a writing assistant to improve manuscript clarity, organization, and adherence to journal formatting guidelines. All scientific content, data analysis, results interpretation, and conclusions are entirely the work of the authors. The AI tool was not used for data generation, analysis, or scientific decision-making. The final manuscript was carefully reviewed, edited, and approved by 
+all authors.
+\item Consent for publication \\ Not applicable.
+\item Data availability \\ The MIMIC-IV dataset is publicly available through PhysioNet (\url{https://physionet.org/content/mimiciv/}) following completion of required training and data use agreements. The processed data is available from the corresponding author upon reasonable request and with permission. Alternatively, the data extraction codes are available in the GitHub repository (link provided below).
+\item Materials availability \\ Not applicable.
+\item Code availability \\ All analysis code is available on GitHub at \url{https://github.com/aaazmnnds/sepsis-rsf-mimic-iv}.
+\item Author contribution \\ \textbf{Nads A}: Conceptualization, methodology, software, formal analysis, project administration, writing---original draft, funding acquisition. \textbf{Andrade D}: Conceptualization, validation, writing---review and editing. \textbf{Zhang ZH}: Supervision, validation, writing---review and editing, funding acquisition. \textbf{Molenberghs G}: Methodology, validation, writing---review and editing. \textbf{Hasim S}, \textbf{Idris SR}, and \textbf{Nasirin A}: Resources and editing. \textbf{Andrade D}, \textbf{Molenberghs G}, and \textbf{Zhang ZH} provided critical reviews and significant intellectual contributions that greatly improved the quality of the manuscript. All authors read and approved the final manuscript.
+\end{itemize}
+
+%%===================================================%%
+%% For presentation purpose, we have included        %%
+%% \bigskip command. Please ignore this.             %%
+%%===================================================%%
+
+
+
+
+\bibliography{survival-sepsis}
+
+\begin{appendices}
+
+\section{Patient characteristics}\label{secA1}
+
+\begin{table}[h]
+\scriptsize
+\centering
+\caption{Baseline characteristics of the study cohort (n=852)}
+\label{tab:patient_characteristics}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Characteristic} & \textbf{Value} \\
+\midrule
+\multicolumn{2}{l}{\textbf{Demographics}} \\
+Age (years), Mean (SD) & 64.1 (14.7) \\
+Male sex, n (\%) & 440 (51.6) \\
+\multicolumn{2}{l}{\textbf{Vital Signs}} \\
+Heart rate (bpm) & 75.4 [68.7, 81.7] \\
+Respiratory rate (breaths/min) & 17.8 [15.3, 20.7] \\
+Glasgow Coma Scale (GCS) & 13.0 [11.0, 15.0] \\
+\multicolumn{2}{l}{\textbf{Laboratory Values}} \\
+Lactate (mmol/L) & 1.5 [1.2, 1.9] \\
+Platelet count ($10^9$/L) & 220.2 [184.5, 258.3] \\
+Sodium (mmol/L) & 124.8 [120.5, 128.7] \\
+Chloride (mmol/L) & 104.0 [100.6, 107.5] \\
+Alanine aminotransferase (ALT) (U/L) & 35.5 [26.2, 49.0] \\
+Aspartate aminotransferase (AST) (U/L) & 35.5 [26.3, 49.0] \\
+\multicolumn{2}{l}{\textbf{Outcomes}} \\
+In-hospital mortality, n (\%) & 56 (6.6) \\
+Length of stay (days) & 34.4 [14.6, 68.5] \\
+\bottomrule
+\multicolumn{2}{l}{\footnotesize Values are Median [IQR] unless outcome/sex (n, \%) or Age (Mean (SD)).}
+\end{tabular}
+\end{table}
+
+\section{Missing data analysis}\label{secA2}
+
+Table \ref{tab:missingness_summary} details the percentage of missing data for each clinical variable across the real MIMIC-IV dataset and the three simulated missing data mechanisms (MCAR, MAR, MNAR). The simulation was designed to strictly mirror the missingness profile of the real-world data.
+
+\begin{table}[h]
+\centering
+\caption{Percentage of missing values per clinical variable. Missingness rates were identical across the Real Data (MIMIC-IV) and all Simulated Mechanisms (MCAR, MAR, MNAR).}
+\label{tab:missingness_summary}
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Variable} & \textbf{Missingness (\%)} \\
+\midrule
+Alanine aminotransferase (ALT)     & 57.0 \\
+Aspartate aminotransferase (AST)   & 56.2 \\
+Glasgow Coma Scale (GCS)           & 56.0 \\
+Heart rate (HR)                    & 55.6 \\
+Respiratory rate (RR)              & 55.6 \\
+Lactate                            & 46.8 \\
+Chloride                           & 7.3  \\
+Sodium                             & 7.3  \\
+Platelet count                     & 6.6  \\
+\bottomrule
+\multicolumn{2}{l}{\footnotesize Note: Variables with 0\% missingness are not listed.}
+\end{tabular}
+\end{table}
+
+Figure \ref{fig:dist_comparison} illustrates the distribution of Lactate levels across the complete simulated dataset (ground truth), the three missing data mechanisms (observed values), and the real MIMIC-IV data. The overlap indicates that our simulation framework preserves the underlying data distribution structure.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{distribution_comparison_complete_vs_missing.png}
+\caption{Distribution of lactate values: comparison between complete simulated data, missing data mechanisms (MCAR, MAR, MNAR), and real data (MIMIC-IV). Plot shows observed values.}
+\label{fig:dist_comparison}
+\end{figure}
+
+\section{Implementation details and hyperparameters}\label{secA3}
+
+Table \ref{tab:implementation_details} summarizes the software, packages, and specific hyperparameter settings used for the missing data simulation, imputation methods, and survival analysis models. All statistical analyses were performed using R statistical software \cite{r2023language} and Python \cite{python2023language}. Statistical significance for hypothesis tests (e.g., log-rank test) was set at $p < 0.05$ (two-sided).
+
+\section{Additional validation plots}\label{secA4}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{auc_time_dependent.png}
+\caption{Time-dependent Area Under the Curve (AUC) for all survival models across 3, 7, and 14 days. Error bars represent 95\% confidence intervals.}
+\label{fig:auc_time}
+\end{figure}
+
+\begin{table}[ht]
+\centering
+\caption{Implementation details and hyperparameter settings for all methods}
+\label{tab:implementation_details}
+\tiny
+\renewcommand{\arraystretch}{0.8}
+\begin{tabular}{@{}lp{12cm}@{}}
+\toprule
+\textbf{Method} & \textbf{Hyperparameters \& Implementation Details} \\
+\midrule
+MICE \cite{van2011mice} & Imputations ($m$): 5; Iterations: 20; Method: Random Forest (\texttt{rf}); Package: \texttt{mice} (R) \\
+\midrule
+missForest \cite{stekhoven2012missforest} & Trees ($ntree$): 100; Max iterations: 10; Package: \texttt{missForest} (R) \\
+\midrule
+GAIN \cite{yoon2018gain} & Architecture: 3-layer MLPs; $\alpha$: 100; Epochs: 500; Batch: 64; LR: 0.001; Framework: PyTorch \\
+\midrule
+MIDA \cite{gondara2018mida} & Architecture: Denoising AE [In+Mask $\to$ 20 $\to$ 20 $\to$ 10]; $\theta$: 7; Epochs: 500; LR: 0.001; Framework: PyTorch \\
+\midrule
+RSF \cite{ishwaran2008random} & Estimators ($n\_estimators$): 1000; Min samples leaf: 15; Split rule: log-rank; Package: \texttt{scikit-survival} \\
+\midrule
+XGBoost \cite{chen2016xgboost} & Objective: \texttt{survival:cox}; Booster: \texttt{hist}; Rounds: 100; Package: \texttt{xgboost} \\
+\midrule
+DeepSurv \cite{katzman2018deepsurv} & Structure: MLP [32, 32]; Optimizer: Adam ($lr=0.001$); Batch: 256; Epochs: 100; Package: \texttt{pycox} \\
+\midrule
+Gradient Boosting \cite{hothorn2010model} & Loss: Cox Partial Likelihood; Estimators: 100; Learn rate: 0.1; Package: \texttt{scikit-survival} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%%===========================================================================================%%
+%% If you are submitting to one of the Nature Portfolio journals, using the eJP submission   %%
+%% system, please include the references within the manuscript file itself. You may do this  %%
+%% by copying the reference list from your .bbl file, paste it into the main manuscript .tex %%
+%% file, and delete the associated \verb+\bibliography+ commands.                            %%
+%%===========================================================================================%%
+
+
+
+\end{appendices}
+
+
+%% if required, the content of .bbl file can be included here once bbl is generated
+%%\input sn-article.bbl
+
+\end{document}

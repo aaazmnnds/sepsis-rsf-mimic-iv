@@ -1,17 +1,45 @@
-# Ignore everything by default
-*
+# Python
+__pycache__/
+*.py[cod]
+*.so
+venv/
+env/
 
-# Allow directories
-!*/
+# Data
+data/raw/*
+data/imputed/*
+data/synthetic/*
+!data/raw/.keep
+!data/imputed/.keep
+!data/synthetic/.keep
 
-# Allow Python and R scripts
-!*.py
-!*.R
+# Results (Keep directory structure but ignore contents?)
+# survival-vae ignores results/. We can do the same.
+results/figures/*
+results/tables/*
+results/predictions/*
+!results/figures/.keep
+!results/tables/.keep
+!results/predictions/.keep
 
-# Allow Documentation and Config
-!README.md
-!LICENSE
-!requirements.txt
-!.gitignore
-!GITHUB_UPLOAD_GUIDE.md
-!*.tex
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE/OS
+.vscode/
+.DS_Store
+.idea/
+
+# LaTeX / Manuscript build files
+manuscript/*.aux
+manuscript/*.log
+manuscript/*.out
+manuscript/*.bbl
+manuscript/*.blg
+manuscript/*.fls
+manuscript/*.fdb_latexmk
+manuscript/*.synctex.gz
+
+# Submission Archives
+BMC_Submission_Package/
+*.zip

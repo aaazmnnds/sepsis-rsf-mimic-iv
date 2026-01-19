@@ -22,46 +22,27 @@ This repository contains the complete code and data for the manuscript:
 
 ```
 .
-├── README.md                          # This file
-├── requirements.txt                   # Python dependencies
-├── environment.yml                    # Conda environment (optional)
 ├── data/
-│   ├── primary/
-│   │   └── mimic_sepsis_cohort_full.csv    # Primary MIMIC-IV cohort (n=852)
-│   ├── imputed/                       # Imputed datasets (32 files)
-│   │   ├── imputed_GAIN_full.csv
-│   │   ├── imputed_MIDA_full.csv
-│   │   ├── imputed_mice1-5_full.csv
-│   │   ├── imputed_missForest_full.csv
-│   │   └── ... (+ MAR, MCAR, MNAR variants)
-│   └── outputs/                       # Analysis outputs
-│       ├── predictions/
-│       ├── statistics/
-│       └── tables/
-├── scripts/
-│   ├── extract_mimic_data.py          # Master data extraction script (MIMIC-IV)
-│   ├── 01_data_simulation.R           # Generate synthetic cohort
-│   ├── 02_imputation_r.R              # MICE & missForest imputation
-│   ├── 03_imputation_python.py        # GAIN & MIDA imputation
-│   ├── 04_survival_models.py          # Train all 4 survival models
-│   ├── 05_visualize_data.R            # Data distribution plots
-│   ├── 06_visualize_model_performance.py  # Performance plots
-│   ├── 07_generate_python_predictions.py  # Full cohort RSF predictions
-│   ├── 08_FINAL_publication_analysis.R    # Log-rank test & KM curves
-│   └── utils/                         # Helper scripts
-│       ├── generate_table1.py
-│       ├── generate_flowchart.py
-│       ├── extract_lactate_medians.py
-│       └── regenerate_figure_b1.py
+│   ├── raw/                   # mimic_sepsis_cohort_full.csv (n=852)
+│   ├── imputed/               # Imputed datasets (GAIN, MIDA, MICE, missForest)
+│   └── synthetic/             # Synthetic datasets for sensitivity analysis
+├── src/
+│   ├── data_loading/          # Scripts to load and preprocess MIMIC-IV data
+│   ├── missingness/           # Imputation algorithms (R and Python)
+│   ├── models/                # Random Survival Forest & Baseline models
+│   ├── evaluation/            # Performance metrics, log-rank tests, tables
+│   └── visualization/         # Flowcharts, KM curves, plots
 ├── results/
-│   ├── figures/                       # All manuscript figures
-│   ├── tables/                        # LaTeX tables
-│   └── statistics/                    # Statistical outputs
-└── docs/
-    ├── MIMIC_IV_data_extraction.md    # Data extraction guide
-    └── reproducibility_guide.md       # Step-by-step reproduction
-
-```
+│   ├── figures/               # Generated plots and figures
+│   ├── tables/                # CSV tables for manuscript
+│   └── predictions/           # Model survival probabilities
+├── manuscript/                # LaTeX source files and bibliography
+├── notebook/                  # Jupyter notebooks for exploratory analysis
+├── scripts/                   # Helper shell scripts
+├── docs/                      # Documentation and guides
+├── requirements.txt           # Python dependencies
+└── README.md                  # This file
+````
 
 ---
 

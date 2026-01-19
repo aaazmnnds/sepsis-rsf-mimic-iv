@@ -1,0 +1,44 @@
+\documentclass[11pt]{letter}
+\usepackage[utf8]{inputenc}
+\usepackage[top=1in,bottom=1in,left=1in,right=1in]{geometry}
+\usepackage{hyperref}
+
+\signature{Azman Nads, PhD (Candidate)\\
+Mindanao State University Tawi-Tawi College of Technology and Oceanography\\
+and Hiroshima University, Japan\\
+\texttt{azmannads@msutawi-tawi.edu.ph}}
+
+\address{Azman Nads\\
+Department of Statistics\\
+Mindanao State University Tawi-Tawi College of Technology and Oceanography\\
+Sanga-Sanga, Bongao, Tawi-Tawi, Philippines 7500}
+
+\begin{document}
+
+\begin{letter}{Editorial Board\\
+BMC Medical Research Methodology\\
+Springer Nature}
+
+\opening{Dear Editorial Board,}
+
+We are pleased to submit our manuscript entitled \textbf{``Survival analysis of sepsis after laparoscopic surgery using random survival forests: a MIMIC-IV database study with methodological validation''} for consideration as a Research Article in \textit{BMC Medical Research Methodology}.
+
+Sepsis following laparoscopic surgery presents a critical challenge for prognostic modeling due to high patient heterogeneity and the pervasive issue of missing data in electronic health records (EHR). While machine learning (ML) models are increasingly applied in this domain, rigorous benchmark comparisons regarding missing data strategies are scarce.
+
+Our study addresses this gap by providing a comprehensive methodological evaluation of Random Survival Forests (RSF) against state-of-the-art alternatives, including DeepSurv, XGBoost, and component-wise gradient boosting. Our key methodological contributions involve:
+\begin{itemize}
+    \item \textbf{Advanced Imputation Comparisons:} We rigorously benchmark, via both real-world data and controlled simulations, the impact of deep generative imputation (Generative Adversarial Imputation Nets - GAIN) versus traditional methods (MICE, missForest). We demonstrate that GAIN significantly enhances predictive performance, particularly under non-random missingness (MNAR) conditions.
+    \item \textbf{Proper Scoring Rules:} We utilize strictly proper scoring rules (Integrated Brier Score) alongside C-indices to ensure a robust validation of model calibration and discrimination.
+    \item \textbf{Dual Validation Framework:} Our findings are validated on a large real-world cohort from the MIMIC-IV database and confirmed through a parallel simulation study, ensuring the reproducibility and reliability of our methodological conclusions.
+\end{itemize}
+
+Given \textit{BMC Medical Research Methodology}'s focus on methodological innovation and validation in biomedical research, we believe our findings on the critical role of advanced imputation in machine learning survival analysis will be of significant interest to your readership.
+
+We confirm that this manuscript is original, has not been published elsewhere, and is not under consideration by another journal. All authors have approved the manuscript and agree with its submission. We declare no conflicts of interest.
+
+Thank you for your consideration.
+
+\closing{Sincerely,}
+
+\end{letter}
+\end{document}

@@ -1,0 +1,5 @@
+"Dataset","N","Age_Missing_N","Age_Missing_Pct","ALT_Missing_N","ALT_Missing_Pct","HR_Missing_N","HR_Missing_Pct","RR_Missing_N","RR_Missing_Pct","GCS_Missing_N","GCS_Missing_Pct","Cl_Missing_N","Cl_Missing_Pct","Lac_Missing_N","Lac_Missing_Pct","Plt_Missing_N","Plt_Missing_Pct","Na_Missing_N","Na_Missing_Pct","AST_Missing_N","AST_Missing_Pct","Survival_Time_Missing_N","Survival_Time_Missing_Pct","Status_Missing_N","Status_Missing_Pct","subject_id_Missing_N","subject_id_Missing_Pct","hadm_id_Missing_N","hadm_id_Missing_Pct","N_Missing_N","N_Missing_Pct"
+"MCAR",852,0,0,486,57,474,55.6,474,55.6,477,56,62,7.3,399,46.8,56,6.6,62,7.3,479,56.2,0,0,0,0,852,100,852,100,0,0
+"MAR",852,0,0,486,57,474,55.6,474,55.6,477,56,62,7.3,399,46.8,56,6.6,62,7.3,479,56.2,0,0,0,0,852,100,852,100,0,0
+"MNAR",852,0,0,486,57,474,55.6,474,55.6,477,56,62,7.3,399,46.8,56,6.6,62,7.3,479,56.2,0,0,0,0,852,100,852,100,0,0
+"Real Data (MIMIC)",852,0,0,486,57,474,55.6,474,55.6,477,56,62,7.3,399,46.8,56,6.6,62,7.3,479,56.2,0,0,0,0,0,0,0,0,0,0

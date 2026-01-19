@@ -1,0 +1,5 @@
+Method,Median_Imputed,Median_Observed
+MICE,1.8,1.6
+missForest,1.783,1.6
+GAIN,1.600000025331974,1.6
+MIDA,1.4966420285403728,1.6

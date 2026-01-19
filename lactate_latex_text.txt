@@ -1,0 +1,1 @@
+with key variables like Lactate showing close alignment (MICE: median imputed 1.80 vs observed 1.60, missForest: median imputed 1.78 vs observed 1.60, GAIN: median imputed 1.60 vs observed 1.60, MIDA: median imputed 1.50 vs observed 1.60).
