@@ -36,7 +36,6 @@ This repository contains the complete code and data for the manuscript:
 │   ├── figures/               # Generated plots and figures
 │   ├── tables/                # CSV tables for manuscript
 │   └── predictions/           # Model survival probabilities
-├── manuscript/                # LaTeX source files and bibliography
 ├── notebook/                  # Jupyter notebooks for exploratory analysis
 ├── scripts/                   # Helper shell scripts
 ├── docs/                      # Documentation and guides
