@@ -10,6 +10,7 @@ Output: full_cohort_rsf_predictions.csv with n=852 predictions
 
 import pandas as pd
 import numpy as np
+import os
 from sklearn.preprocessing import StandardScaler
 from sksurv.util import Surv
 from sksurv.ensemble import RandomSurvivalForest
@@ -23,16 +24,29 @@ print("=" * 80)
 # ============================================================================
 print("\n1. Loading full cohort data...")
 
-# Try to load the data file
-try:
-    data = pd.read_csv("mimic_sepsis_cohort_full.csv")
-    print(f"   Loaded: mimic_sepsis_cohort_full.csv")
-except FileNotFoundError:
+# Updated paths to check for the data file
+possible_data_paths = [
+    "mimic_sepsis_cohort_full.csv",
+    "data/raw/mimic_sepsis_cohort_full.csv",
+    "../data/raw/mimic_sepsis_cohort_full.csv",
+    "../../data/raw/mimic_sepsis_cohort_full.csv"
+]
+
+data = None
+for path in possible_data_paths:
+    if os.path.exists(path):
+        try:
+            data = pd.read_csv(path)
+            print(f"   Loaded: {path}")
+            break
+        except Exception as e:
+            print(f"   Error reading {path}: {e}")
+
+if data is None:
     print("   ERROR: mimic_sepsis_cohort_full.csv not found!")
-    print("   Please ensure the full MIMIC-IV cohort data file exists.")
-    exit(1)
-except Exception as e:
-    print(f"   ERROR loading data: {e}")
+    print("   Please ensure the data file exists in one of the following locations:")
+    for path in possible_data_paths:
+        print(f"     - {path}")
     exit(1)
 
 print(f"   Total patients: n={len(data)}")
@@ -60,12 +74,14 @@ X_scaled = scaler.fit_transform(X)
 # ============================================================================
 print("\n3. Training RSF on full cohort...")
 
+# CRITICAL FIX: Add oob_score=True to generate unbiased predictions for training data
 rsf = RandomSurvivalForest(
     n_estimators=1000,
     min_samples_split=10,
     min_samples_leaf=15,
     n_jobs=-1,
-    random_state=42
+    random_state=42,
+    oob_score=True   # Added to enable OOB predictions
 )
 
 rsf.fit(X_scaled, y)
@@ -76,11 +92,18 @@ print("   RSF training complete!")
 # ============================================================================
 print("\n4. Generating predictions for all patients...")
 
-# Get risk scores (higher = higher risk)
-risk_scores = rsf.predict(X_scaled)
+# CRITICAL FIX: Use unbiased OOB predictions instead of biased rsf.predict(X_scaled)
+try:
+    risk_scores = rsf.oob_prediction_
+    print("   Uising UNBIASED Out-of-Bag (OOB) risk scores.")
+except AttributeError:
+    print("   WARNING: OOB predictions not found. Falling back to standard prediction (LEAKAGE RISK).")
+    risk_scores = rsf.predict(X_scaled)
 
 # Create risk groups (median split)
 median_risk = np.median(risk_scores)
+
+# Use >= for High to handle potential ties; check split counts
 risk_groups = ["High" if r >= median_risk else "Low" for r in risk_scores]
 
 # Prepare output dataframe
@@ -113,6 +136,5 @@ print("\n" + "=" * 80)
 print("PREDICTION GENERATION COMPLETE")
 print("=" * 80)
 print("\nNext step:")
-print("  Run: Rscript extract_full_cohort_statistics.R")
-print("  (Update the R script to read 'full_cohort_rsf_predictions.csv')")
+print("  Run: python src/visualization/generate_km_curves.py")
 print("=" * 80)

@@ -25,14 +25,14 @@ def create_data_science_symbol():
             for end_node in layers[i+1]:
                 # Randomize alpha for "active" look
                 alpha = random.uniform(0.1, 0.4)
-                ax.plot([start_node[0], end_node[0]], [start_node[1], end_node[1]], 
+                ax.plot([start_node[0], end_node[0]], [start_node[1], end_node[1]],
                         c='#0077be', lw=1.5, alpha=alpha, zorder=1)
 
     # Draw Nodes
     for layer_idx, nodes in layers.items():
         x_vals = [n[0] for n in nodes]
         y_vals = [n[1] for n in nodes]
-        
+
         # Color gradient based on layer
         if layer_idx == 0: color = '#004c6d' # Dark Blue
         elif layer_idx == 1: color = '#0077be' # Medium Blue
@@ -52,7 +52,7 @@ def create_data_science_symbol():
     ]
 
     for sym, pos in symbols:
-        ax.text(pos[0], pos[1], sym, fontsize=18, color='#004c6d', alpha=0.7, 
+        ax.text(pos[0], pos[1], sym, fontsize=18, color='#004c6d', alpha=0.7,
                 ha='center', va='center', fontname='DejaVu Sans')
 
     # Save as SVG

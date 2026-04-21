@@ -20,28 +20,28 @@ print("\n1. Loading full model predictions...")
 try:
     df = pd.read_csv("model_predictions.csv")
     print(f"   Loaded {len(df)} total predictions")
-    
+
     # Filter for RSF + GAIN
     rsf_gain = df[(df['Model'] == 'RSF') & (df['Imputation'] == 'GAIN')].copy()
     print(f"   RSF-GAIN predictions: {len(rsf_gain)} rows")
-    
+
     if len(rsf_gain) == 0:
         print("   ERROR: No RSF-GAIN predictions found!")
         exit(1)
-    
+
     # Convert status to int
     rsf_gain['Observed_Status'] = rsf_gain['Observed_Status'].astype(int)
-    
+
     # Create risk groups (median split)
     median_risk = rsf_gain['Predicted_Risk'].median()
     rsf_gain['Risk_Group'] = rsf_gain['Predicted_Risk'].apply(
         lambda x: 'High' if x >= median_risk else 'Low'
     )
-    
+
     print(f"   Sample size: n={len(rsf_gain)}")
     print(f"   Events: {rsf_gain['Observed_Status'].sum()}")
     print(f"   Event rate: {rsf_gain['Observed_Status'].mean():.3f}")
-    
+
 except Exception as e:
     print(f"   ERROR: {e}")
     exit(1)
@@ -52,9 +52,9 @@ except Exception as e:
 print("\n2. Calculating calibration statistics...")
 
 rsf_gain['risk_decile'] = pd.qcut(
-    rsf_gain['Predicted_Risk'], 
-    q=10, 
-    labels=False, 
+    rsf_gain['Predicted_Risk'],
+    q=10,
+    labels=False,
     duplicates='drop'
 )
 

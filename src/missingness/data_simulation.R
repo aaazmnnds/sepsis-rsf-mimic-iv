@@ -14,28 +14,28 @@ n <- 852
 data1 <- data.frame(
   # Age: Mean = 65, sd = 15
   Age = rnorm(n, mean = 65, sd = 15),
-  
+
   # ALT (Alanine Aminotransferase): Log-normal
   ALT = rlnorm(n, meanlog = log(35), sdlog = log(1.6)),
-  
+
   # Sex: Binary categorical (M/F)
   Sex = sample(c("M", "F"), n, replace = TRUE, prob = c(0.5, 0.5)),
-  
+
   # Heart Rate (HR): Normal, mean 75, sd 10
   HR = rnorm(n, mean = 75, sd = 10),
-  
+
   # Respiratory Rate (RR): Normal, mean 18, sd 4
   RR = rnorm(n, mean = 18, sd = 4),
-  
+
   # Glasgow Coma Scale (GCS): Normal, mean 13, sd 3
   GCS = rnorm(n, mean = 13, sd = 3),
-  
+
   # Chloride (Cl): Normal, mean 104, sd 5
   Cl = rnorm(n, mean = 104, sd = 5),
-  
+
   # Lactate (Lac): Log-normal
   Lac = rlnorm(n, meanlog = log(1.5), sdlog = log(1.4)),
-  
+
   # Platelet count (Plt): Log-normal
   Plt = rlnorm(n, meanlog = log(220), sdlog = log(1.3))
 )
@@ -88,39 +88,39 @@ miss_rates <- list(
 # Helper function to apply variable-specific missingness
 apply_variable_specific_missingness <- function(data, miss_rates, mechanism = "MCAR") {
   data_miss <- data
-  
+
   for (var in names(miss_rates)) {
     n_miss <- round(nrow(data) * miss_rates[[var]])
-    
+
     if (mechanism == "MCAR") {
       # Completely random
       miss_idx <- sample(seq_len(nrow(data)), n_miss)
-      
+
     } else if (mechanism == "MAR") {
       # Depends on OTHER observed variables
       # Older patients and those with abnormal vitals more likely to have missing labs
       # Use directional relationships (not absolute values)
-      
+
       # Standardize Age (higher age = higher probability)
       age_scaled <- scale(data$Age)[,1]
-      
+
       # Abnormal HR (far from mean of 75)
       hr_abnormal <- abs(data$HR - 75) / sd(data$HR)
-      
+
       # Create probability: higher for older patients and abnormal vitals
       prob_miss <- plogis(age_scaled + 0.5 * hr_abnormal)  # Use logistic to keep in [0,1]
       prob_miss <- prob_miss / sum(prob_miss)
-      
+
       miss_idx <- sample(seq_len(nrow(data)), n_miss, prob = prob_miss)
-      
+
     } else if (mechanism == "MNAR") {
       # Depends on the variable itself
       # Higher values more likely to be missing (sicker patients)
-      
+
       if (is.numeric(data[[var]])) {
         # For clinical labs: higher values (worse outcomes) more likely missing
         # For GCS: LOWER values (worse) more likely missing
-        
+
         if (var == "GCS") {
           # Lower GCS (worse neurological status) more likely to be missing
           var_scaled <- -scale(data[[var]])[,1]  # Negative so lower = higher probability
@@ -128,21 +128,21 @@ apply_variable_specific_missingness <- function(data, miss_rates, mechanism = "M
           # Higher lab values (abnormal) more likely to be missing
           var_scaled <- scale(data[[var]])[,1]
         }
-        
+
         # Convert to probabilities using logistic function
         prob_miss <- plogis(var_scaled)
         prob_miss <- prob_miss / sum(prob_miss)
-        
+
         miss_idx <- sample(seq_len(nrow(data)), n_miss, prob = prob_miss)
       } else {
         # For non-numeric, use random
         miss_idx <- sample(seq_len(nrow(data)), n_miss)
       }
     }
-    
+
     data_miss[miss_idx, var] <- NA
   }
-  
+
   return(data_miss)
 }
 
@@ -176,7 +176,7 @@ check_miss_detailed <- function(df, name) {
   # Overall missingness
   overall_miss <- mean(is.na(df))
   cat("Overall Missingness: ", round(overall_miss * 100, 2), "%\n\n", sep = "")
-  
+
   # Variable-specific missingness
   cat("Variable-Specific Missingness:\n")
   for (var in names(miss_rates)) {

@@ -40,32 +40,32 @@ auc14_data = df_real[df_real['Metric'] == 'AUC_Day14'][['Imputation', 'Model', '
 table1_data = []
 for imp in ['MICE (pooled)', 'missForest', 'GAIN', 'MIDA']:
     row = {'Imputation': imp}
-    
+
     for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
         # CV C-index
         cv_val = cv_data[(cv_data['Imputation']==imp) & (cv_data['Model']==model)]['Formatted'].values
         row[f'{model}_CV'] = cv_val[0] if len(cv_val) > 0 else '—'
-        
+
         # Test C-index
         test_val = test_data[(test_data['Imputation']==imp) & (test_data['Model']==model)]['Mean'].values
         row[f'{model}_Test'] = f"{test_val[0]:.3f}" if len(test_val) > 0 else '—'
-        
+
         # IBS
         ibs_val = ibs_data[(ibs_data['Imputation']==imp) & (ibs_data['Model']==model)]['Mean'].values
         row[f'{model}_IBS'] = f"{ibs_val[0]:.3f}" if len(ibs_val) > 0 else '—'
-        
+
         # AUC Day 3
         auc3_val = auc3_data[(auc3_data['Imputation']==imp) & (auc3_data['Model']==model)]['Mean'].values
         row[f'{model}_AUC3'] = f"{auc3_val[0]:.3f}" if len(auc3_val) > 0 else '—'
-        
+
         # AUC Day 7
         auc7_val = auc7_data[(auc7_data['Imputation']==imp) & (auc7_data['Model']==model)]['Mean'].values
         row[f'{model}_AUC7'] = f"{auc7_val[0]:.3f}" if len(auc7_val) > 0 else '—'
-        
+
         # AUC Day 14
         auc14_val = auc14_data[(auc14_data['Imputation']==imp) & (auc14_data['Model']==model)]['Mean'].values
         row[f'{model}_AUC14'] = f"{auc14_val[0]:.3f}" if len(auc14_val) > 0 else '—'
-    
+
     table1_data.append(row)
 
 table1 = pd.DataFrame(table1_data)
@@ -83,7 +83,7 @@ print("TABLE 2: Imputation Comparison Across Mechanisms")
 print("="*70)
 
 df_rsf = summary[
-    (summary['Model'] == 'RSF') & 
+    (summary['Model'] == 'RSF') &
     (summary['Metric'] == 'C-index (CV)') &
     (summary['Mechanism'].isin(['mcar', 'mar', 'mnar']))
 ].copy()
@@ -117,14 +117,14 @@ best_performers = []
 
 for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
     model_data = summary[
-        (summary['Model'] == model) & 
+        (summary['Model'] == model) &
         (summary['Metric'] == 'C-index (Test)') &
         (summary['Mechanism'] == 'full')
     ].copy()
-    
+
     if len(model_data) > 0:
         best_row = model_data.loc[model_data['Mean'].idxmax()]
-        
+
         # Get CV C-index
         cv_row = summary[
             (summary['Model'] == model) &
@@ -132,7 +132,7 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'C-index (CV)')
         ]
-        
+
         # Get IBS
         ibs_row = summary[
             (summary['Model'] == model) &
@@ -140,7 +140,7 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'IBS (Test)')
         ]
-        
+
         # Get AUC Day 3
         auc3_row = summary[
             (summary['Model'] == model) &
@@ -148,7 +148,7 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'AUC_Day3')
         ]
-        
+
         # Get AUC Day 7
         auc7_row = summary[
             (summary['Model'] == model) &
@@ -156,7 +156,7 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'AUC_Day7')
         ]
-        
+
         # Get AUC Day 14
         auc14_row = summary[
             (summary['Model'] == model) &
@@ -164,7 +164,7 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'AUC_Day14')
         ]
-        
+
         best_performers.append({
             'Model': model,
             'Best Imputation': best_row['Imputation'],
@@ -181,7 +181,7 @@ table3 = table3.sort_values('Test C-index', ascending=False).reset_index(drop=Tr
 table3['Rank'] = range(1, len(table3) + 1)
 
 # Reorder columns
-table3 = table3[['Rank', 'Model', 'Best Imputation', 'CV C-index', 'Test C-index', 
+table3 = table3[['Rank', 'Model', 'Best Imputation', 'CV C-index', 'Test C-index',
                  'IBS', 'AUC Day 3', 'AUC Day 7', 'AUC Day 14']]
 
 table3.to_csv('Table3_model_ranking_with_AUC.csv', index=False)
@@ -198,7 +198,7 @@ print("TABLE 4: Variable Importance")
 print("="*70)
 
 df_vimp = vimp[
-    (vimp['Mechanism'] == 'full') & 
+    (vimp['Mechanism'] == 'full') &
     (vimp['Model'] == 'RSF')
 ].copy()
 
@@ -241,7 +241,7 @@ for mechanism in ['full', 'mcar', 'mar', 'mnar']:
             'Mechanism': mechanism.upper() if mechanism != 'full' else 'Real Data',
             'Model': model
         }
-        
+
         for day in [3, 7, 14]:
             metric = f'AUC_Day{day}'
             auc_vals = auc_all[
@@ -249,13 +249,13 @@ for mechanism in ['full', 'mcar', 'mar', 'mnar']:
                 (auc_all['Model'] == model) &
                 (auc_all['Metric'] == metric)
             ]['Mean'].values
-            
+
             if len(auc_vals) > 0:
                 # Average across imputations
                 row[f'AUC Day {day}'] = f"{auc_vals.mean():.3f}"
             else:
                 row[f'AUC Day {day}'] = '—'
-        
+
         auc_summary_data.append(row)
 
 table5 = pd.DataFrame(auc_summary_data)
@@ -319,7 +319,7 @@ for day in [3, 7, 14]:
         (summary['Mechanism'] == 'full') &
         (summary['Metric'] == f'AUC_Day{day}')
     ]['Mean'].values
-    
+
     if len(auc_val) > 0:
         print(f"   Day {day}: {auc_val[0]:.3f}")
 

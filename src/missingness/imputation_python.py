@@ -20,7 +20,7 @@ class MIDA(nn.Module):
         super(MIDA, self).__init__()
         self.input_dim = input_dim
         self.theta = theta
-        
+
         # Encoder
         self.encoder = nn.Sequential(
             nn.Linear(input_dim + input_dim, latent_dim * 2), # Input + Mask
@@ -29,7 +29,7 @@ class MIDA(nn.Module):
             nn.Tanh(),
             nn.Linear(latent_dim * 2, latent_dim)
         )
-        
+
         # Decoder
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, latent_dim * 2),
@@ -49,33 +49,33 @@ class MIDA(nn.Module):
 
 def run_mida(data, epochs=500, batch_size=64):
     print("Running MIDA imputation...")
-    
+
     # 1. Normalization (Min-Max)
     min_val = np.nanmin(data, axis=0)
     max_val = np.nanmax(data, axis=0)
     # Avoid division by zero
     denom = max_val - min_val
     denom[denom == 0] = 1e-6
-    
+
     norm_data = (data - min_val) / denom
-    
+
     # Fill NaN with 0 for initial input
     filled_data = np.nan_to_num(norm_data, nan=0.0)
-    
+
     # Mask: 1 if observed, 0 if missing
     mask = (~np.isnan(data)).astype(float)
-    
+
     # Convert to Tensor
     tensor_data = torch.FloatTensor(filled_data)
     tensor_mask = torch.FloatTensor(mask)
-    
+
     dataset = TensorDataset(tensor_data, tensor_mask)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
+
     model = MIDA(input_dim=data.shape[1])
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()
-    
+
     model.train()
     for epoch in tqdm(range(epochs), desc="MIDA Training"):
         for batch_x, batch_m in dataloader:
@@ -85,16 +85,16 @@ def run_mida(data, epochs=500, batch_size=64):
             loss = criterion(recon * batch_m, batch_x * batch_m)
             loss.backward()
             optimizer.step()
-            
+
     # Imputation
     model.eval()
     with torch.no_grad():
         imputed_norm = model(tensor_data, tensor_mask).numpy()
-    
+
     # Restore scale
     imputed_data_norm = filled_data * mask + imputed_norm * (1 - mask)
     imputed_data = imputed_data_norm * denom + min_val
-    
+
     return imputed_data
 
 # ==============================================================================
@@ -132,68 +132,68 @@ class Discriminator(nn.Module):
 
 def run_gain(data, alpha=100, epochs=500, batch_size=64):
     print("Running GAIN imputation...")
-    
+
     dim = data.shape[1]
-    
+
     # 1. Normalization
     min_val = np.nanmin(data, axis=0)
     max_val = np.nanmax(data, axis=0)
     denom = max_val - min_val
     denom[denom == 0] = 1e-6
-    
+
     norm_data = (data - min_val) / denom
     filled_data = np.nan_to_num(norm_data, nan=0.0)
     mask = (~np.isnan(data)).astype(float)
-    
+
     tensor_data = torch.FloatTensor(filled_data)
     tensor_mask = torch.FloatTensor(mask)
-    
+
     dataset = TensorDataset(tensor_data, tensor_mask)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
+
     G = Generator(dim)
     D = Discriminator(dim)
-    
+
     G_optim = optim.Adam(G.parameters())
     D_optim = optim.Adam(D.parameters())
-    
+
     # Training
     for epoch in tqdm(range(epochs), desc="GAIN Training"):
         for batch_x, batch_m in dataloader:
-            
+
             # Sample Random Noise & Hint
             Z_mb = torch.rand_like(batch_x)
             H_mb = 1.0 * (torch.rand_like(batch_m) < 0.9) # Hint vector
-            
+
             # Combine random noise with observed data
             X_mb = batch_m * batch_x + (1 - batch_m) * Z_mb
-            
+
             # --- Train Discriminator ---
             D_optim.zero_grad()
             G_sample = G(X_mb, batch_m)
             X_hat = batch_x * batch_m + G_sample * (1 - batch_m)
             D_prob = D(X_hat, H_mb)
-            
+
             D_loss = -torch.mean(batch_m * torch.log(D_prob + 1e-8) + (1 - batch_m) * torch.log(1 - D_prob + 1e-8))
             D_loss.backward()
             D_optim.step()
-            
+
             # --- Train Generator ---
             G_optim.zero_grad()
             G_sample = G(X_mb, batch_m)
             X_hat = batch_x * batch_m + G_sample * (1 - batch_m)
             D_prob = D(X_hat, H_mb)
-            
+
             # MSE Loss for observed components
             MSE_loss = torch.mean((batch_m * batch_x - batch_m * G_sample)**2) / torch.mean(batch_m)
-            
+
             # Adversarial Loss
             G_loss_temp = -torch.mean((1 - batch_m) * torch.log(D_prob + 1e-8))
-            
+
             G_loss = G_loss_temp + alpha * MSE_loss
             G_loss.backward()
             G_optim.step()
-            
+
     # Imputation
     with torch.no_grad():
         Z_final = torch.rand_like(tensor_data)
@@ -201,7 +201,7 @@ def run_gain(data, alpha=100, epochs=500, batch_size=64):
         G_final = G(X_final, tensor_mask)
         imputed_norm = tensor_mask * tensor_data + (1 - tensor_mask) * G_final
         imputed_norm = imputed_norm.numpy()
-        
+
     # Restore scale
     imputed_data = imputed_norm * denom + min_val
     return imputed_data
@@ -213,7 +213,7 @@ def run_gain(data, alpha=100, epochs=500, batch_size=64):
 def main():
     files = glob.glob("synthetic_*.csv")
     files = [f for f in files if "complete" not in f]
-    
+
     if not files:
         print("No synthetic data files found (synthetic_*.csv).")
         return
@@ -221,15 +221,15 @@ def main():
     for file in files:
         mechanism = file.replace("synthetic_", "").replace(".csv", "")
         print(f"\nProcessing mechanism: {mechanism}")
-        
+
         # Determine separability of non-numeric data if any, but simulation script usually produces numeric
         # Assuming only numeric features for DL models here.
         df = pd.read_csv(file)
-        
+
         # Store non-numeric columns to append later if needed, assume all numeric for now based on simulation
         # If ID or non-numeric exists, drop for imputation
         data_numeric = df.select_dtypes(include=[np.number]).values
-        
+
         # 1. Run MIDA
         try:
             mida_imputed = run_mida(data_numeric)
@@ -253,18 +253,18 @@ def main():
     # ==============================================================================
     # Process Real MIMIC Data
     # ==============================================================================
-    
+
     mimic_file = "mimic_sepsis_cohort_full.csv"
-    
+
     if os.path.exists(mimic_file):
         print(f"\nProcessing real MIMIC data: {mimic_file}")
-        
+
         # Read real MIMIC data
         df_full = pd.read_csv(mimic_file)
-        
+
         # Extract numeric columns only
         data_numeric_full = df_full.select_dtypes(include=[np.number]).values
-        
+
         # 1. Run MIDA
         try:
             mida_imputed_full = run_mida(data_numeric_full)
@@ -274,7 +274,7 @@ def main():
             print(f"Saved: {filename_mida_full}")
         except Exception as e:
             print(f"Error in MIDA for real MIMIC data: {e}")
-        
+
         # 2. Run GAIN
         try:
             gain_imputed_full = run_gain(data_numeric_full)

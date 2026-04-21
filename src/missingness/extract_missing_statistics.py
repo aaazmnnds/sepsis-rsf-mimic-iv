@@ -40,41 +40,41 @@ print("="*70)
 try:
     # Load model predictions
     predictions_df = pd.read_csv('model_predictions.csv')
-    
+
     # Assuming the predictions file has columns: 'predicted_risk', 'observed_event', 'time', 'event'
     # Create risk deciles
-    predictions_df['risk_decile'] = pd.qcut(predictions_df['predicted_risk'], 
-                                             q=10, 
-                                             labels=False, 
+    predictions_df['risk_decile'] = pd.qcut(predictions_df['predicted_risk'],
+                                             q=10,
+                                             labels=False,
                                              duplicates='drop')
-    
+
     # Calculate observed event rate per decile
     calibration_data = predictions_df.groupby('risk_decile').agg({
         'predicted_risk': 'mean',
         'event': 'mean'  # This gives the observed event rate
     }).reset_index()
-    
+
     calibration_data.columns = ['decile', 'mean_predicted_risk', 'observed_event_rate']
-    
+
     # Extract ranges
     pred_risk_min = calibration_data['mean_predicted_risk'].min()
     pred_risk_max = calibration_data['mean_predicted_risk'].max()
     obs_rate_min = calibration_data['observed_event_rate'].min()
     obs_rate_max = calibration_data['observed_event_rate'].max()
-    
+
     print(f"\n📊 Calibration Plot Ranges:")
     print(f"   Predicted risk range: {pred_risk_min:.2f} to {pred_risk_max:.2f}")
     print(f"   Observed event rate range: {obs_rate_min:.2f} to {obs_rate_max:.2f}")
-    
+
     print(f"\n✅ LaTeX text to add:")
     print(f'   "Across the 10 risk deciles, predicted risk ranged from {pred_risk_min:.2f} to {pred_risk_max:.2f}, ')
     print(f'   while observed event rates ranged from {obs_rate_min:.2f} to {obs_rate_max:.2f}, showing close ')
     print(f'   correspondence between predictions and outcomes."')
-    
+
     # Save calibration data
     calibration_data.to_csv('calibration_ranges.csv', index=False)
     print(f"\n💾 Saved to: calibration_ranges.csv")
-    
+
 except Exception as e:
     print(f"\n❌ Error calculating calibration ranges: {e}")
     print("   Please ensure 'model_predictions.csv' exists with columns: predicted_risk, event")
@@ -89,32 +89,32 @@ print("="*70)
 try:
     # Load predictions with risk groups
     predictions_df = pd.read_csv('model_predictions.csv')
-    
+
     # Create high/low risk groups (median split)
     median_risk = predictions_df['predicted_risk'].median()
     predictions_df['risk_group'] = predictions_df['predicted_risk'].apply(
         lambda x: 'High Risk' if x >= median_risk else 'Low Risk'
     )
-    
+
     # Fit Kaplan-Meier for each group
     results_30_60 = {}
-    
+
     for group in ['High Risk', 'Low Risk']:
         group_data = predictions_df[predictions_df['risk_group'] == group]
-        
+
         kmf = KaplanMeierFitter()
-        kmf.fit(durations=group_data['time'], 
+        kmf.fit(durations=group_data['time'],
                 event_observed=group_data['event'],
                 label=group)
-        
+
         # Get survival probabilities at 30 and 60 days
         surv_30 = kmf.survival_function_at_times(30).values[0]
         surv_60 = kmf.survival_function_at_times(60).values[0]
-        
+
         # Get confidence intervals
         ci_30 = kmf.confidence_interval_survival_function_.loc[30]
         ci_60 = kmf.confidence_interval_survival_function_.loc[60]
-        
+
         results_30_60[group] = {
             '30_day_surv': surv_30,
             '30_day_ci_lower': ci_30.iloc[0],
@@ -123,7 +123,7 @@ try:
             '60_day_ci_lower': ci_60.iloc[0],
             '60_day_ci_upper': ci_60.iloc[1]
         }
-    
+
     print(f"\n📊 Survival Probabilities:")
     print(f"\n   HIGH-RISK GROUP (n={len(predictions_df[predictions_df['risk_group']=='High Risk'])}):")
     print(f"   • 30 days: {results_30_60['High Risk']['30_day_surv']:.2f} "
@@ -132,7 +132,7 @@ try:
     print(f"   • 60 days: {results_30_60['High Risk']['60_day_surv']:.2f} "
           f"(95% CI: {results_30_60['High Risk']['60_day_ci_lower']:.2f}-"
           f"{results_30_60['High Risk']['60_day_ci_upper']:.2f})")
-    
+
     print(f"\n   LOW-RISK GROUP (n={len(predictions_df[predictions_df['risk_group']=='Low Risk'])}):")
     print(f"   • 30 days: {results_30_60['Low Risk']['30_day_surv']:.2f} "
           f"(95% CI: {results_30_60['Low Risk']['30_day_ci_lower']:.2f}-"
@@ -140,7 +140,7 @@ try:
     print(f"   • 60 days: {results_30_60['Low Risk']['60_day_surv']:.2f} "
           f"(95% CI: {results_30_60['Low Risk']['60_day_ci_lower']:.2f}-"
           f"{results_30_60['Low Risk']['60_day_ci_upper']:.2f})")
-    
+
     print(f"\n✅ LaTeX text to add:")
     print(f'   "At 30 days, survival probability was {results_30_60["High Risk"]["30_day_surv"]:.2f} ')
     print(f'   (95% CI: {results_30_60["High Risk"]["30_day_ci_lower"]:.2f}-{results_30_60["High Risk"]["30_day_ci_upper"]:.2f}) ')
@@ -148,12 +148,12 @@ try:
     print(f'   (95% CI: {results_30_60["Low Risk"]["30_day_ci_lower"]:.2f}-{results_30_60["Low Risk"]["30_day_ci_upper"]:.2f}) ')
     print(f'   for the low-risk group. At 60 days, survival probabilities were ')
     print(f'   {results_30_60["High Risk"]["60_day_surv"]:.2f} and {results_30_60["Low Risk"]["60_day_surv"]:.2f}, respectively."')
-    
+
     # Save results
     surv_df = pd.DataFrame(results_30_60).T
     surv_df.to_csv('survival_probabilities.csv')
     print(f"\n💾 Saved to: survival_probabilities.csv")
-    
+
 except Exception as e:
     print(f"\n❌ Error calculating survival probabilities: {e}")
     print("   Please ensure 'model_predictions.csv' exists with columns: time, event, predicted_risk")
@@ -168,30 +168,30 @@ print("="*70)
 try:
     # Use Cox PH model to calculate hazard ratio
     predictions_df = pd.read_csv('model_predictions.csv')
-    
+
     # Create binary risk group variable (1 = High Risk, 0 = Low Risk)
     median_risk = predictions_df['predicted_risk'].median()
     predictions_df['high_risk'] = (predictions_df['predicted_risk'] >= median_risk).astype(int)
-    
+
     # Fit Cox model
     cph = CoxPHFitter()
     cox_data = predictions_df[['time', 'event', 'high_risk']].copy()
     cph.fit(cox_data, duration_col='time', event_col='event')
-    
+
     # Extract HR and CI
     hr = np.exp(cph.params_['high_risk'])
     ci_lower = np.exp(cph.confidence_intervals_.loc['high_risk', '95% lower-bound'])
     ci_upper = np.exp(cph.confidence_intervals_.loc['high_risk', '95% upper-bound'])
     p_value = cph.summary.loc['high_risk', 'p']
-    
+
     print(f"\n📊 Hazard Ratio:")
     print(f"   HR (High vs Low Risk): {hr:.2f} (95% CI: {ci_lower:.2f}-{ci_upper:.2f}, p < 0.001)")
-    
+
     print(f"\n✅ LaTeX text to add:")
     print(f'   "The groups showed clear separation with a log-rank test p < 0.001 and ')
     print(f'   hazard ratio of {hr:.2f} (95% CI: {ci_lower:.2f}-{ci_upper:.2f}, p < 0.001) ')
     print(f'   for high-risk versus low-risk patients."')
-    
+
     # Save results
     hr_results = pd.DataFrame({
         'Hazard_Ratio': [hr],
@@ -201,7 +201,7 @@ try:
     })
     hr_results.to_csv('hazard_ratio.csv', index=False)
     print(f"\n💾 Saved to: hazard_ratio.csv")
-    
+
 except Exception as e:
     print(f"\n❌ Error calculating hazard ratio: {e}")
     print("   Please ensure 'model_predictions.csv' exists with columns: time, event, predicted_risk")
@@ -227,7 +227,7 @@ try:
     # Attempt to load if files exist
     imputation_methods = ['MICE', 'missForest', 'GAIN', 'MIDA']
     medians = {}
-    
+
     # This is a template - adjust file names based on your actual files
     for method in imputation_methods:
         try:
@@ -237,14 +237,14 @@ try:
             medians[method] = df['lactate'].median()
         except:
             medians[method] = None
-    
+
     # Try to load observed
     try:
         obs_df = pd.read_csv('lactate_observed.csv')
         observed_median = obs_df['lactate'].median()
     except:
         observed_median = None
-    
+
     if any(medians.values()) and observed_median:
         print(f"\n📊 Lactate Medians (Imputed vs Observed):")
         for method, median in medians.items():
@@ -252,7 +252,7 @@ try:
                 print(f"   {method}: imputed {median:.1f} vs observed {observed_median:.1f}")
     else:
         print("\n   Files not found. Please create them from your imputation results.")
-        
+
 except Exception as e:
     print(f"\n   Could not automatically calculate. Error: {e}")
 

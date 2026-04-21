@@ -22,7 +22,7 @@ print("All CSV files loaded successfully\n")
 
 def generate_table1_latex():
     """Generate Table 1: Main Results on Real MIMIC-IV Data"""
-    
+
     latex = []
     latex.append(r"% Table 1: Model Performance on Real MIMIC-IV Data with Time-Dependent AUC")
     latex.append(r"\begin{table*}[!ht]")
@@ -36,21 +36,21 @@ def generate_table1_latex():
     latex.append(r"\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9}")
     latex.append(r"\textbf{Imputation} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} & \textbf{CV} & \textbf{Test} \\")
     latex.append(r"\midrule")
-    
+
     models = ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']
-    
+
     for _, row in table1.iterrows():
         imp = row['Imputation'].replace('_', r'\_')
-        
+
         # Build row with CV and Test for each model
         row_vals = [imp]
         for model in models:
             cv = row[f'{model}_CV']
             test = row[f'{model}_Test']
             row_vals.extend([cv, test])
-        
+
         latex.append("  & " + " & ".join([str(x) for x in row_vals[1:]]) + r" \\")
-        
+
         # Add CI line (extract from CV values)
         ci_vals = ['']
         for model in models:
@@ -60,13 +60,13 @@ def generate_table1_latex():
                 ci_vals.extend([r"\scriptsize (" + ci + ")", ''])
             else:
                 ci_vals.extend(['', ''])
-        
+
         latex.append("  & " + " & ".join(ci_vals[1:]) + r" \\[0.5ex]")
-    
+
     latex.append(r"\midrule")
     latex.append(r"\multicolumn{9}{l}{\textbf{Integrated Brier Score (IBS)}} \\")
     latex.append(r"\midrule")
-    
+
     # IBS row
     ibs_vals = [r'\textbf{IBS}']
     for model in models:
@@ -79,13 +79,13 @@ def generate_table1_latex():
             ibs_vals.append(r"\multicolumn{2}{c}{" + f"{ibs_min:.3f}--{ibs_max:.3f}" + r"}")
         else:
             ibs_vals.append(r"\multicolumn{2}{c}{—}")
-    
+
     latex.append("  & " + " & ".join(ibs_vals[1:]) + r" \\")
-    
+
     latex.append(r"\midrule")
     latex.append(r"\multicolumn{9}{l}{\textbf{Time-Dependent AUC (Averaged Across Imputations)}} \\")
     latex.append(r"\midrule")
-    
+
     # AUC rows
     for day in [3, 7, 14]:
         auc_vals = [f'Day {day}']
@@ -98,9 +98,9 @@ def generate_table1_latex():
                 auc_vals.append(r"\multicolumn{2}{c}{" + f"{auc_mean:.3f}" + r"}")
             else:
                 auc_vals.append(r"\multicolumn{2}{c}{—}")
-        
+
         latex.append("  & " + " & ".join(auc_vals[1:]) + r" \\")
-    
+
     latex.append(r"\bottomrule")
     latex.append(r"\end{tabular}")
     latex.append(r"\begin{flushleft}")
@@ -108,7 +108,7 @@ def generate_table1_latex():
     latex.append("CV = Cross-validated C-index (10-fold), reported as Mean with 95\\% CI in parentheses. Test = C-index on held-out test set (10\\%). IBS = Integrated Brier Score (range across imputation methods; lower is better). Time-dependent AUC shown at 3, 7, and 14 days post-surgery, averaged across imputation methods. For MICE, Rubin's pooled estimates shown. — indicates metric not available for model.")
     latex.append(r"\end{flushleft}")
     latex.append(r"\end{table*}")
-    
+
     return "\n".join(latex)
 
 # ============================================================================
@@ -117,7 +117,7 @@ def generate_table1_latex():
 
 def generate_table2_latex():
     """Generate Table 2: Imputation Comparison"""
-    
+
     latex = []
     latex.append(r"\begin{table}[!ht]")
     latex.append(r"\centering")
@@ -125,22 +125,22 @@ def generate_table2_latex():
     latex.append(r"\label{tab:imputation_comparison}")
     latex.append(r"\begin{tabular}{@{}lcccc@{}}")
     latex.append(r"\toprule")
-    
+
     # Get column names (imputation methods)
     cols = [c for c in table2.columns if c != 'Mechanism']
     header = r"\textbf{Mechanism} & " + " & ".join([r"\textbf{" + c.replace('_', r'\_') + r"}" for c in cols])
     latex.append(header + r" \\")
     latex.append(r"\midrule")
-    
+
     for _, row in table2.iterrows():
         mech = row['Mechanism'].upper()
         vals = [mech]
         for col in cols:
             val = str(row[col])
             vals.append(val)
-        
+
         latex.append(" & ".join(vals) + r" \\")
-        
+
         # CI line
         ci_vals = ['']
         for col in cols:
@@ -150,9 +150,9 @@ def generate_table2_latex():
                 ci_vals.append(r"\scriptsize (" + ci + ")")
             else:
                 ci_vals.append('')
-        
+
         latex.append("     & " + " & ".join(ci_vals[1:]) + r" \\[0.5ex]")
-    
+
     # Calculate average
     latex.append(r"\midrule")
     avg_vals = [r'\textbf{Average}']
@@ -169,7 +169,7 @@ def generate_table2_latex():
             avg_vals.append(f"\\textbf{{{np.mean(vals):.3f}}}")
         else:
             avg_vals.append('—')
-    
+
     latex.append(" & ".join(avg_vals) + r" \\")
     latex.append(r"\bottomrule")
     latex.append(r"\end{tabular}")
@@ -178,7 +178,7 @@ def generate_table2_latex():
     latex.append("Values are cross-validated C-index as Mean with 95\\% CI (10-fold CV). MCAR = Missing Completely At Random, MAR = Missing At Random, MNAR = Missing Not At Random. Deep learning methods (GAIN, MIDA) outperformed traditional methods (MICE, missForest) across all mechanisms.")
     latex.append(r"\end{flushleft}")
     latex.append(r"\end{table}")
-    
+
     return "\n".join(latex)
 
 # ============================================================================
@@ -187,7 +187,7 @@ def generate_table2_latex():
 
 def generate_table3_latex():
     """Generate Table 3: Model Ranking with AUC"""
-    
+
     latex = []
     latex.append(r"\begin{table}[!ht]")
     latex.append(r"\centering")
@@ -198,7 +198,7 @@ def generate_table3_latex():
     latex.append(r"\toprule")
     latex.append(r"\textbf{Rank} & \textbf{Model} & \textbf{Best Imputation} & \textbf{CV C-index} & \textbf{Test C-index} & \textbf{IBS} & \textbf{AUC (Day 7)} & \textbf{AUC (Day 14)} \\")
     latex.append(r"\midrule")
-    
+
     for _, row in table3.iterrows():
         rank = int(row['Rank'])
         model = row['Model']
@@ -208,16 +208,16 @@ def generate_table3_latex():
         ibs = row['IBS']
         auc7 = row['AUC Day 7']
         auc14 = row['AUC Day 14']
-        
+
         latex.append(f"{rank} & {model} & {imp} & {cv} & {test} & {ibs} & {auc7} & {auc14} " + r"\\")
-        
+
         # CI line
         if '(' in str(cv):
             ci = str(cv).split('(')[1].replace(')', '')
             latex.append(f"  &   &    & \\scriptsize ({ci}) &  &  &  &  " + r"\\[0.5ex]")
         else:
             latex.append(r"[0.5ex]")
-    
+
     latex.append(r"\bottomrule")
     latex.append(r"\end{tabular}")
     latex.append(r"\begin{flushleft}")
@@ -225,7 +225,7 @@ def generate_table3_latex():
     latex.append("Models ranked by test C-index using optimal imputation. CV C-index: Mean (95\\% CI) from 10-fold CV. IBS = Integrated Brier Score (lower is better). AUC shown at 7 and 14 days post-surgery. — indicates metric unavailable.")
     latex.append(r"\end{flushleft}")
     latex.append(r"\end{table}")
-    
+
     return "\n".join(latex)
 
 # ============================================================================
@@ -234,7 +234,7 @@ def generate_table3_latex():
 
 def generate_table4_latex():
     """Generate Table 4: Variable Importance"""
-    
+
     # Feature name mapping
     feature_names = {
         'Plt': 'Platelet count (Plt)',
@@ -251,7 +251,7 @@ def generate_table4_latex():
         'Sex': 'Sex',
         'Sex_M': 'Sex (Male)'
     }
-    
+
     latex = []
     latex.append(r"\begin{table}[!ht]")
     latex.append(r"\centering")
@@ -261,16 +261,16 @@ def generate_table4_latex():
     latex.append(r"\toprule")
     latex.append(r"\textbf{Rank} & \textbf{Feature} & \textbf{Importance} & \textbf{Std. Dev.} \\")
     latex.append(r"\midrule")
-    
+
     for _, row in table4.iterrows():
         rank = int(row['Rank'])
         feature_raw = row['Feature']
         feature = feature_names.get(feature_raw, feature_raw)
         importance = row['Importance']
         std = row['Std']
-        
+
         latex.append(f"{rank} & {feature} & {importance} & {std} " + r"\\")
-    
+
     latex.append(r"\bottomrule")
     latex.append(r"\end{tabular}")
     latex.append(r"\begin{flushleft}")
@@ -278,7 +278,7 @@ def generate_table4_latex():
     latex.append("Variable importance via permutation importance on test set (n=5 repetitions). Values represent mean decrease in C-index when feature values are randomly permuted. $^{\\text{a}}$Subject ID is a data artifact; exclude in clinical deployment.")
     latex.append(r"\end{flushleft}")
     latex.append(r"\end{table}")
-    
+
     return "\n".join(latex)
 
 # ============================================================================
@@ -287,7 +287,7 @@ def generate_table4_latex():
 
 def generate_table5_latex():
     """Generate Table 5: Time-Dependent AUC Summary"""
-    
+
     latex = []
     latex.append(r"\begin{table*}[!ht]")
     latex.append(r"\centering")
@@ -298,22 +298,22 @@ def generate_table5_latex():
     latex.append(r"\toprule")
     latex.append(r"\textbf{Dataset} & \textbf{Model} & \textbf{AUC Day 3} & \textbf{AUC Day 7} & \textbf{AUC Day 14} \\")
     latex.append(r"\midrule")
-    
+
     # Group by mechanism
     for mech in table5['Mechanism'].unique():
         latex.append(r"\multicolumn{5}{l}{\textit{" + mech + r"}} \\")
-        
+
         mech_data = table5[table5['Mechanism'] == mech]
         for _, row in mech_data.iterrows():
             model = row['Model']
             auc3 = row['AUC Day 3']
             auc7 = row['AUC Day 7']
             auc14 = row['AUC Day 14']
-            
+
             latex.append(f"  & {model} & {auc3} & {auc7} & {auc14} " + r"\\")
-        
+
         latex.append(r"[0.3ex]")
-    
+
     latex.append(r"\bottomrule")
     latex.append(r"\end{tabular}")
     latex.append(r"\begin{flushleft}")
@@ -321,7 +321,7 @@ def generate_table5_latex():
     latex.append("Time-dependent AUC (area under ROC curve) at 3, 7, and 14 days post-surgery, averaged across imputation methods. Real Data = MIMIC-IV; MCAR, MAR, MNAR = simulated missing data mechanisms. AUC ranges from 0 (poor) to 1 (perfect discrimination). Values near 1.0 indicate excellent predictive ability at that time point.")
     latex.append(r"\end{flushleft}")
     latex.append(r"\end{table*}")
-    
+
     return "\n".join(latex)
 
 # ============================================================================

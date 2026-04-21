@@ -30,6 +30,7 @@ results/
 .vscode/
 .DS_Store
 .idea/
+*.Rhistory
 
 # LaTeX / Manuscript build files
 *.aux

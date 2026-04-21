@@ -70,20 +70,20 @@ colors = {
 for name, data in datasets.items():
     if len(data) > 0:
         median_val = np.median(data)
-        
+
         # Plot KDE (Density Curve)
         data_clean = data[~np.isnan(data)]
         if len(data_clean) > 10:
-            sns.kdeplot(data_clean, fill=True, alpha=0.1, label=f'{name} (median={median_val:.2f})', 
+            sns.kdeplot(data_clean, fill=True, alpha=0.1, label=f'{name} (median={median_val:.2f})',
                        color=colors.get(name, 'gray'), ax=ax, linewidth=2.5)
-            
+
             # Add median line
-            ax.axvline(median_val, color=colors.get(name, 'gray'), 
+            ax.axvline(median_val, color=colors.get(name, 'gray'),
                       linestyle='--', linewidth=1.5, alpha=0.8)
 
 ax.set_xlabel('Lactate (mmol/L)', fontsize=13, fontweight='bold')
 ax.set_ylabel('Density', fontsize=13, fontweight='bold')
-ax.set_title('Figure B1: Distribution of Lactate Values Across Imputation Methods\nwith Median Value Annotations', 
+ax.set_title('Figure B1: Distribution of Lactate Values Across Imputation Methods\nwith Median Value Annotations',
             fontsize=14, fontweight='bold', pad=20)
 ax.legend(loc='upper right', fontsize=11, framealpha=0.9)
 ax.grid(True, alpha=0.3)
@@ -107,7 +107,7 @@ for name, data in datasets.items():
         median_val = np.median(data)
         table_data.append([name, f"{median_val:.2f} mmol/L"])
 
-table = ax.table(cellText=table_data, 
+table = ax.table(cellText=table_data,
                 colLabels=['Method', 'Median Lactate'],
                 cellLoc='left',
                 loc='center',
@@ -128,7 +128,7 @@ for i in range(1, len(table_data) + 1):
         if i % 2 == 0:
             table[(i, j)].set_facecolor('#E7E6E6')
 
-plt.title('Lactate Median Values by Imputation Method', 
+plt.title('Lactate Median Values by Imputation Method',
          fontsize=14, fontweight='bold', pad=20)
 plt.savefig('lactate_medians_table.png', dpi=300, bbox_inches='tight')
 print("Saved: lactate_medians_table.png (bonus summary table)")

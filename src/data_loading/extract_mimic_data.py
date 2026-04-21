@@ -2,6 +2,8 @@
 MIMIC-IV Sepsis Cohort Extraction Script
 ========================================
 This script extracts the sepsis cohort from MIMIC-IV database.
+BASE_DIR = Path(__file__).resolve().parents[2]
+
 It performs the following steps:
 1. Extracts base cohort (Sepsis + Surgical + Adults)
 2. Extracts Laboratory Values (ALT, AST, Lactate, Sodium, Chloride, Platelets)
@@ -25,8 +27,8 @@ warnings.filterwarnings('ignore')
 # CONFIGURATION
 # ============================================================================
 
-MIMIC_PATH = '/Users/azmannads/Downloads/Dr. Zhang/mimic-iv-2.2/'
-OUTPUT_PATH = '/Users/azmannads/Downloads/Dr. Zhang'
+MIMIC_PATH = BASE_DIR / 'data' / 'mimic-iv-2.2'
+OUTPUT_PATH = BASE_DIR
 INTERMEDIATE_PATH = os.path.join(OUTPUT_PATH, 'intermediate')
 FINAL_PATH = os.path.join(OUTPUT_PATH, 'final')
 LOG_PATH = os.path.join(OUTPUT_PATH, 'logs')
@@ -74,7 +76,7 @@ def check_files():
         'icu/icustays.csv.gz',
         'icu/chartevents.csv.gz'
     ]
-    
+
     all_exist = True
     for file in files_to_check:
         full_path = os.path.join(MIMIC_PATH, file)
@@ -144,7 +146,7 @@ def step1_extract_base_cohort():
 
     # Select columns
     cohort_base = cohort[[
-        'subject_id', 'hadm_id', 'age', 'gender', 
+        'subject_id', 'hadm_id', 'age', 'gender',
         'admittime', 'dischtime', 'Time', 'Event'
     ]].copy()
 
@@ -187,13 +189,13 @@ def step2_extract_labs():
         chunk_count += 1
         if chunk_count % 5 == 0:
             print(f"  Processing chunk {chunk_count}...", end='\r')
-        
+
         chunk_filtered = chunk[
             (chunk['hadm_id'].isin(hadm_ids)) &
             (chunk['itemid'].isin(all_lab_ids)) &
             (chunk['valuenum'].notna())
         ]
-        
+
         if len(chunk_filtered) > 0:
             labs_list.append(chunk_filtered)
 
@@ -202,7 +204,7 @@ def step2_extract_labs():
     if labs_list:
         labs = pd.concat(labs_list, ignore_index=True)
         print(f"  Extracted {len(labs):,} lab measurements")
-        
+
         # Pivot
         labs['lab_name'] = labs['itemid'].map(item_to_name)
         labs_first = labs.groupby(['hadm_id', 'lab_name'])['valuenum'].first().reset_index()
@@ -211,10 +213,10 @@ def step2_extract_labs():
             columns='lab_name',
             values='valuenum'
         ).reset_index()
-        
+
         # Merge
         cohort = cohort.merge(labs_wide, on='hadm_id', how='left')
-        
+
         # Rename
         cohort = cohort.rename(columns={
             'Lactate': 'Lac',
@@ -222,7 +224,7 @@ def step2_extract_labs():
             'Chloride': 'Cl',
             'Platelets': 'Plt'
         })
-        
+
         # Coverage
         print("\n2. Lab coverage:")
         for lab in ['ALT', 'AST', 'Lac', 'Na', 'Cl', 'Plt']:
@@ -264,11 +266,11 @@ def step3_extract_vitals():
         for name, ids in VITAL_ITEMS.items():
             for item_id in ids:
                 item_to_name[item_id] = name
-        
+
         print("\n2. Extracting vitals (this may take 10-15 minutes)...")
         vitals_list = []
         chunk_count = 0
-        
+
         for chunk in pd.read_csv(
             f'{MIMIC_PATH}icu/chartevents.csv.gz',
             compression='gzip',
@@ -278,22 +280,22 @@ def step3_extract_vitals():
             chunk_count += 1
             if chunk_count % 10 == 0:
                 print(f"  Processing chunk {chunk_count}...", end='\r')
-            
+
             chunk_filtered = chunk[
                 (chunk['stay_id'].isin(stay_ids)) &
                 (chunk['itemid'].isin(all_vital_ids)) &
                 (chunk['valuenum'].notna())
             ]
-            
+
             if len(chunk_filtered) > 0:
                 vitals_list.append(chunk_filtered)
-        
+
         print()
-        
+
         if vitals_list:
             vitals = pd.concat(vitals_list, ignore_index=True)
             print(f"  Extracted {len(vitals):,} vital measurements")
-            
+
             # Pivot
             vitals['vital_name'] = vitals['itemid'].map(item_to_name)
             vitals_mean = vitals.groupby(['stay_id', 'vital_name'])['valuenum'].mean().reset_index()
@@ -302,17 +304,17 @@ def step3_extract_vitals():
                 columns='vital_name',
                 values='valuenum'
             ).reset_index()
-            
+
             # Merge
             cohort_icu = cohort_icu.merge(vitals_wide, on='stay_id', how='left')
             vital_cols = [c for c in ['HR', 'RR'] if c in cohort_icu.columns]
-            
+
             cohort = cohort.merge(
                 cohort_icu[['hadm_id'] + vital_cols].drop_duplicates('hadm_id'),
                 on='hadm_id',
                 how='left'
             )
-            
+
             # Coverage
             print("\n3. Vital coverage:")
             for vital in ['HR', 'RR']:
@@ -334,7 +336,7 @@ def step4_extract_gcs():
 
     # Load cohort
     cohort = pd.read_csv(os.path.join(INTERMEDIATE_PATH, 'cohort_with_vitals.csv'))
-    
+
     # Reload ICU stays needed for merging
     icustays = pd.read_csv(
         f'{MIMIC_PATH}icu/icustays.csv.gz',
@@ -350,7 +352,7 @@ def step4_extract_gcs():
         print("\n1. Extracting GCS (this may take 10-15 minutes)...")
         gcs_list = []
         chunk_count = 0
-        
+
         for chunk in pd.read_csv(
             f'{MIMIC_PATH}icu/chartevents.csv.gz',
             compression='gzip',
@@ -360,25 +362,25 @@ def step4_extract_gcs():
             chunk_count += 1
             if chunk_count % 10 == 0:
                 print(f"  Processing chunk {chunk_count}...", end='\r')
-            
+
             chunk_filtered = chunk[
                 (chunk['stay_id'].isin(stay_ids)) &
                 (chunk['itemid'].isin(GCS_ITEMS)) &
                 (chunk['valuenum'].notna())
             ]
-            
+
             if len(chunk_filtered) > 0:
                 gcs_list.append(chunk_filtered)
-        
+
         print()
-        
+
         if gcs_list:
             gcs = pd.concat(gcs_list, ignore_index=True)
             print(f"  Extracted {len(gcs):,} GCS measurements")
-            
+
             # Get total GCS
             gcs_total = gcs[gcs['itemid'] == 198].groupby('stay_id')['valuenum'].min()
-            
+
             if len(gcs_total) == 0:
                 gcs['component'] = gcs['itemid'].map({
                     220739: 'eye',
@@ -393,17 +395,17 @@ def step4_extract_gcs():
                 )
                 if len(gcs_comp) > 0:
                     gcs_total = gcs_comp.sum(axis=1)
-            
+
             if len(gcs_total) > 0:
                 gcs_scores = gcs_total.reset_index().rename(columns={0: 'GCS'})
                 cohort_icu = cohort_icu.merge(gcs_scores, on='stay_id', how='left')
-                
+
                 cohort = cohort.merge(
                     cohort_icu[['hadm_id', 'GCS']].drop_duplicates('hadm_id'),
                     on='hadm_id',
                     how='left'
                 )
-                
+
                 pct = cohort['GCS'].notna().sum() / len(cohort) * 100
                 print(f"  GCS: {cohort['GCS'].notna().sum():,} ({pct:.1f}%)")
 

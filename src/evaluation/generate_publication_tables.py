@@ -31,19 +31,19 @@ for imp in ['MICE (pooled)', 'missForest', 'GAIN', 'MIDA']:
         # CV C-index with CI
         cv_val = cv_data[(cv_data['Imputation']==imp) & (cv_data['Model']==model)]['Formatted'].values
         cv_str = cv_val[0] if len(cv_val) > 0 else '—'
-        
+
         # Test C-index
         test_val = test_data[(test_data['Imputation']==imp) & (test_data['Model']==model)]['Mean'].values
         test_str = f"{test_val[0]:.3f}" if len(test_val) > 0 else '—'
-        
+
         # IBS
         ibs_val = ibs_data[(ibs_data['Imputation']==imp) & (ibs_data['Model']==model)]['Mean'].values
         ibs_str = f"{ibs_val[0]:.3f}" if len(ibs_val) > 0 else '—'
-        
+
         row[f'{model}_CV'] = cv_str
         row[f'{model}_Test'] = test_str
         row[f'{model}_IBS'] = ibs_str
-    
+
     table1_data.append(row)
 
 table1 = pd.DataFrame(table1_data)
@@ -60,7 +60,7 @@ print("="*70)
 
 # Focus on RSF (primary model) across mechanisms
 df_rsf = summary[
-    (summary['Model'] == 'RSF') & 
+    (summary['Model'] == 'RSF') &
     (summary['Metric'] == 'C-index (CV)') &
     (summary['Mechanism'].isin(['mcar', 'mar', 'mnar']))
 ].copy()
@@ -92,14 +92,14 @@ best_performers = []
 
 for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
     model_data = summary[
-        (summary['Model'] == model) & 
+        (summary['Model'] == model) &
         (summary['Metric'] == 'C-index (Test)') &
         (summary['Mechanism'] == 'full')
     ].copy()
-    
+
     if len(model_data) > 0:
         best_row = model_data.loc[model_data['Mean'].idxmax()]
-        
+
         # Get corresponding CV and IBS
         cv_row = summary[
             (summary['Model'] == model) &
@@ -107,14 +107,14 @@ for model in ['RSF', 'XGBoost', 'GradientBoosting', 'DeepSurv']:
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'C-index (CV)')
         ]
-        
+
         ibs_row = summary[
             (summary['Model'] == model) &
             (summary['Imputation'] == best_row['Imputation']) &
             (summary['Mechanism'] == 'full') &
             (summary['Metric'] == 'IBS (Test)')
         ]
-        
+
         best_performers.append({
             'Model': model,
             'Best Imputation': best_row['Imputation'],
@@ -142,7 +142,7 @@ print("="*70)
 # Let's use the full dataset results
 
 df_vimp = vimp[
-    (vimp['Mechanism'] == 'full') & 
+    (vimp['Mechanism'] == 'full') &
     (vimp['Model'] == 'RSF')
 ].copy()
 
@@ -206,7 +206,7 @@ mice_rsf_real = summary[
 if len(mice_rsf_real) > 0:
     print(f"\nMICE + RSF ON REAL DATA (Baseline):")
     print(f"   CV C-index: {mice_rsf_real['Formatted'].values[0]}")
-    
+
     mice_test = summary[
         (summary['Imputation'] == 'MICE (pooled)') &
         (summary['Model'] == 'RSF') &
@@ -223,12 +223,12 @@ for model in ['RSF']:
         (summary['Mechanism'] == 'full') &
         (summary['Metric'] == 'C-index (Test)')
     ].copy()
-    
+
     if len(model_full) > 0:
         best = model_full['Mean'].max()
         worst = model_full['Mean'].min()
         diff = best - worst
-        
+
         print(f"\n{model} - IMPUTATION IMPACT:")
         print(f"   Best: {best:.3f}")
         print(f"   Worst: {worst:.3f}")

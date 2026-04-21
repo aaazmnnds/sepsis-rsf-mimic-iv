@@ -93,28 +93,28 @@ except FileNotFoundError:
 if results:
     results_df = pd.DataFrame(results)
     results_df.to_csv("lactate_medians_figure_b1.csv", index=False)
-    
+
     print("\n" + "=" * 80)
     print("RESULTS SUMMARY")
     print("=" * 80)
     print("\nLactate Median Values (mmol/L):")
     print(results_df.to_string(index=False))
-    
+
     # Generate LaTeX text
     print("\n" + "=" * 80)
     print("LATEX TEXT FOR SECTION 3.2 (Figure B1)")
     print("=" * 80)
-    
+
     latex_parts = []
     for _, row in results_df.iterrows():
         latex_parts.append(f"{row['Method']}: median imputed {row['Median_Imputed']:.2f} vs observed {row['Median_Observed']:.2f}")
-    
+
     latex_text = "with key variables like Lactate showing close alignment (" + ", ".join(latex_parts) + ")."
     print(f"\n{latex_text}")
-    
+
     with open("lactate_latex_text.txt", "w") as f:
         f.write(latex_text)
-    
+
     print("\n" + "=" * 80)
     print("Files saved:")
     print("  - lactate_medians_figure_b1.csv")

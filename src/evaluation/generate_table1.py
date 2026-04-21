@@ -5,7 +5,7 @@ def format_cont(series):
     # Check for normality? Simplified: Report Mean (SD) for Age, Median [IQR] for others
     # Actually paper said: "means ± standard deviations for normally distributed... medians [interquartile ranges] for non-normal"
     # We will assume Age is normal, others are skewed (common in sepsis)
-    
+
     if series.name == "Age":
         return f"{series.mean():.1f} ({series.std():.1f})"
     else:
@@ -23,13 +23,13 @@ def generate_table1():
 
     # Total N
     n_total = len(df)
-    
+
     # Sex
     n_male = df["Sex"].value_counts().get("M", 0)
     p_male = (n_male / n_total) * 100
     n_female = df["Sex"].value_counts().get("F", 0)
     p_female = (n_female / n_total) * 100
-    
+
     # Define variables and display names
     vars_map = {
         "Age": "Age (years)",
@@ -45,26 +45,26 @@ def generate_table1():
         "AST": "AST (U/L)",
         "Survival_Time": "Length of Stay (days)"
     }
-    
+
     # Mappings if columns strictly match CSV headers (Assume they do from head command earlier)
     # Earlier head: Age,ALT,Sex,HR,RR,GCS,Cl,Lac,Plt,Na,AST,Time,Event
-    
+
     # Rename for easier access
     if "Time" in df.columns: df.rename(columns={"Time": "Survival_Time"}, inplace=True)
-    
+
     rows = []
-    
+
     # 1. Demographics
     rows.append(r"\multicolumn{2}{l}{\textbf{Demographics}} \\")
     rows.append(f"Age (years), Mean (SD) & {format_cont(df['Age'])} \\\\")
     rows.append(f"Male Sex, n (\%) & {n_male} ({p_male:.1f}) \\\\")
-    
+
     # 2. Vitals
     rows.append(r"\multicolumn{2}{l}{\textbf{Vital Signs}} \\")
     rows.append(f"Heart Rate (bpm) & {format_cont(df['HR'])} \\\\")
     rows.append(f"Respiratory Rate (breaths/min) & {format_cont(df['RR'])} \\\\")
     rows.append(f"Glasgow Coma Scale & {format_cont(df['GCS'])} \\\\")
-    
+
     # 3. Labs
     rows.append(r"\multicolumn{2}{l}{\textbf{Laboratory Values}} \\")
     rows.append(f"Lactate (mmol/L) & {format_cont(df['Lac'])} \\\\")
@@ -73,7 +73,7 @@ def generate_table1():
     rows.append(f"Chloride (mmol/L) & {format_cont(df['Cl'])} \\\\")
     rows.append(f"ALT (U/L) & {format_cont(df['ALT'])} \\\\")
     rows.append(f"AST (U/L) & {format_cont(df['AST'])} \\\\")
-    
+
     # 4. Outcomes
     rows.append(r"\multicolumn{2}{l}{\textbf{Outcomes}} \\")
     n_dead = df["Event"].sum()
@@ -97,10 +97,10 @@ def generate_table1():
 \end{tabular}
 \end{table}
 """
-    
+
     print("Generated LaTeX Table:")
     print(latex_table)
-    
+
     with open("table1_content.tex", "w") as f:
         f.write(latex_table)
 

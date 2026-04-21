@@ -7,7 +7,7 @@ import os
 
 def smoke_test():
     print("Running Smoke Test...")
-    
+
     # 1. Create Dummy Data
     N = 100
     df = pd.DataFrame({
@@ -19,14 +19,14 @@ def smoke_test():
     # Ensure at least some events and censoring
     df.loc[0:4, 'Status'] = 1
     df.loc[5:9, 'Status'] = 0
-    
+
     print("Dummy Data Created.")
-    
+
     # Prepare X and y
     X = df.drop(columns=['Survival_Time', 'Status']).values
-    y = np.array([(bool(s), t) for s, t in zip(df['Status'], df['Survival_Time'])], 
+    y = np.array([(bool(s), t) for s, t in zip(df['Status'], df['Survival_Time'])],
                  dtype=[('Status', '?'), ('Survival_Time', '<f8')])
-    
+
     # 2. Test RSF
     print("\nTesting RSF...")
     try:
@@ -44,13 +44,13 @@ def smoke_test():
         times = np.array([3.0, 7.0])
         # Filter times within range
         times = [t for t in times if t < y['Survival_Time'].max() and t > y['Survival_Time'].min()]
-        
+
         auc, mean_auc = cumulative_dynamic_auc(y, y, risk, times)
         print(f"  AUC Calculation: Success (Values: {auc})")
     except Exception as e:
         print(f"  AUC FAILED: {e}")
         # Don't exit, just report (since script has try/except)
-        
+
     print("\nSmoke Test Complete. Script is valid.")
 
 if __name__ == "__main__":

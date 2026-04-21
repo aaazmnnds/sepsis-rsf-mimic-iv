@@ -9,6 +9,9 @@ This repository contains the complete code and data for the manuscript:
 
 **"Survival Analysis of Sepsis After Laparoscopic Surgery Using Random Survival Forests: A MIMIC-IV Database Study with Methodological Validation"**
 
+### Methodology Summary
+This study implements a robust machine learning pipeline centered on **Random Survival Forests (RSF)** to predict postoperative sepsis. A key methodological focus is the rigorous comparison of multiple imputation frameworks (GAIN, MIDA, MICE, missForest) specifically tailored for survival outcomes in surgical intensive care settings.
+
 ### Key Features
 - **Random Survival Forest (RSF)** implementation for postoperative sepsis prediction
 - Comprehensive comparison of **4 imputation methods**: MICE, missForest, GAIN, MIDA
@@ -65,13 +68,12 @@ conda env create -f environment.yml
 conda activate sepsis-rsf
 ```
 
-### Data Access
+### Data Availability
 
-The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV v2.2**. To access:
-
-1. Complete CITI training: https://physionet.org/about/citi-course/
-2. Request access: https://physionet.org/content/mimiciv/2.2/
-3. Follow extraction guide in `docs/MIMIC_IV_data_extraction.md`
+The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV v2.2**. 
+- MIMIC-IV data available at **PhysioNet**: [https://physionet.org/content/mimiciv/2.2/](https://physionet.org/content/mimiciv/2.2/)
+- Users must complete CITI training and request access via PhysioNet.
+- Follow the extraction guide in `docs/MIMIC_IV_data_extraction.md` for local setup.
 
 ---
 

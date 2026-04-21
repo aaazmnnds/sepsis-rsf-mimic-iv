@@ -27,7 +27,7 @@ try:
     result = permutation_importance(rsf, X, y, n_repeats=2, random_state=42)
     print("Permutation Importance calculated:")
     print(result.importances_mean)
-    
+
     print("SUCCESS: Environment is working.")
 
 except Exception as e:
