@@ -18,9 +18,10 @@ run_mice <- function(data, output_prefix, m = 5, maxit = 20, seed = 123) {
   # Save each of the m=5 imputed datasets separately
   for (i in 1:m) {
     imputed_data <- complete(imp, i)
-    filename <- paste0("imputed_mice", i, "_", output_prefix, ".csv")
-    write.csv(imputed_data, filename, row.names = FALSE)
-    message(paste("Saved:", filename))
+    filename <- paste0("mice", i, "_", output_prefix, ".csv")
+    full_path <- file.path(output_dir, filename)
+    write.csv(imputed_data, full_path, row.names = FALSE)
+    message(paste("Saved:", full_path))
   }
 }
 
@@ -38,22 +39,37 @@ run_missforest <- function(data, seed = 123) {
   return(imp$ximp)
 }
 
+# Output Configuration
+ROOT_DIR <- "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+data_dir <- file.path(ROOT_DIR, "Results sensitivity")
+output_dir <- file.path(ROOT_DIR, "Results sensitivity")
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Parse command line arguments for specific rates
+args <- commandArgs(trailingOnly = TRUE)
+target_rates <- if (length(args) > 0) args else NULL
+
 # Get list of synthetic datasets (mcar, mar, mnar)
-files <- list.files(pattern = "synthetic_.*\\.csv")
+files <- list.files(path = data_dir, pattern = "synthetic_.*\\.csv", full.names = TRUE)
 files <- files[!grepl("complete", files)]
 
-if (file.exists("mimic_sepsis_cohort_full.csv")) {
-  files <- c(files, "mimic_sepsis_cohort_full.csv")
+# Filter by rates if specified
+if (!is.null(target_rates)) {
+  cat(sprintf("Filtering for specific rates: %s\n", paste(target_rates, collapse=", ")))
+  # Match _rate.csv (e.g., _10.csv)
+  pattern <- paste0("_", target_rates, ".csv", collapse="|")
+  files <- files[grepl(pattern, files)]
+  cat(sprintf("Files remaining after filtering: %d\n", length(files)))
 }
 
 if (length(files) == 0) {
-  warning("No synthetic_*.csv files found. Please run data_simulation.R first.")
+  warning("No matching synthetic_*.csv files found.")
 }
 
 for (file in files) {
-  # Extract mechanism name
-  mechanism <- gsub("synthetic_|\\.csv", "", file)
-  message(paste("Processing mechanism:", mechanism))
+  # Extract mechanism name (e.g., mcar_10)
+  mechanism <- gsub("synthetic_|\\.csv", "", basename(file))
+  message(paste("\nProcessing mechanism:", mechanism))
 
   # Read data
   data <- read.csv(file)
@@ -63,37 +79,48 @@ for (file in files) {
   if ("Event" %in% names(data)) names(data)[names(data) == "Event"] <- "Status"
 
   # 1. Run MICE
-  tryCatch(
-    {
-      run_mice(data, output_prefix = mechanism, m = 5)
-    },
-    error = function(e) {
-      message(paste("Error in MICE for", mechanism, ":", e$message))
-    }
-  )
+  mice_check <- file.path(output_dir, paste0("mice1_", mechanism, ".csv"))
+  if (file.exists(mice_check)) {
+    message(paste("Skipping MICE for", mechanism, "- already exists"))
+  } else {
+    tryCatch(
+      {
+        run_mice(data, output_prefix = mechanism, m = 5)
+      },
+      error = function(e) {
+        message(paste("Error in MICE for", mechanism, ":", e$message))
+      }
+    )
+  }
 
   # 2. Run missForest
-  tryCatch(
-    {
-      missforest_imputed <- run_missforest(data)
-      missforest_filename <- paste0("imputed_missForest_", mechanism, ".csv")
-      write.csv(missforest_imputed, missforest_filename, row.names = FALSE)
-      message(paste("Saved:", missforest_filename))
-    },
-    error = function(e) {
-      message(paste("Error in missForest for", mechanism, ":", e$message))
-    }
-  )
+  missforest_filename <- paste0("missForest_", mechanism, ".csv")
+  full_path_mf <- file.path(output_dir, missforest_filename)
+  
+  if (file.exists(full_path_mf)) {
+    message(paste("Skipping missForest for", mechanism, "- already exists"))
+  } else {
+    tryCatch(
+      {
+        missforest_imputed <- run_missforest(data)
+        write.csv(missforest_imputed, full_path_mf, row.names = FALSE)
+        message(paste("Saved:", full_path_mf))
+      },
+      error = function(e) {
+        message(paste("Error in missForest for", mechanism, ":", e$message))
+      }
+    )
+  }
 }
 
 # ============================================================================
 # Process Real MIMIC Data
 # ============================================================================
 
-mimic_file <- "mimic_sepsis_cohort_full.csv"
+mimic_file <- file.path(ROOT_DIR, "mimic_sepsis_cohort_full.csv")
 
 if (file.exists(mimic_file)) {
-  message(paste("Processing real MIMIC data:", mimic_file))
+  message(paste("\nProcessing real MIMIC data:", mimic_file))
 
   # Read real MIMIC data
   data_full <- read.csv(mimic_file)
@@ -103,27 +130,37 @@ if (file.exists(mimic_file)) {
   if ("Event" %in% names(data_full)) names(data_full)[names(data_full) == "Event"] <- "Status"
 
   # 1. Run MICE FULL
-  tryCatch(
-    {
-      run_mice(data_full, output_prefix = "full", m = 5)
-    },
-    error = function(e) {
-      message(paste("Error in MICE for real MIMIC data:", e$message))
-    }
-  )
+  mice_full_check <- file.path(output_dir, "mice1_full.csv")
+  if (file.exists(mice_full_check)) {
+    message("Skipping MICE for real MIMIC data - already exists")
+  } else {
+    tryCatch(
+      {
+        run_mice(data_full, output_prefix = "full", m = 5)
+      },
+      error = function(e) {
+        message(paste("Error in MICE for real MIMIC data:", e$message))
+      }
+    )
+  }
 
   # 2. Run missForest
-  tryCatch(
-    {
-      missforest_imputed_full <- run_missforest(data_full)
-      missforest_filename_full <- "imputed_missForest_full.csv"
-      write.csv(missforest_imputed_full, missforest_filename_full, row.names = FALSE)
-      message(paste("Saved:", missforest_filename_full))
-    },
-    error = function(e) {
-      message(paste("Error in missForest for real MIMIC data:", e$message))
-    }
-  )
+  mf_full_filename <- "missForest_full.csv"
+  mf_full_path <- file.path(output_dir, mf_full_filename)
+  if (file.exists(mf_full_path)) {
+    message("Skipping missForest for real MIMIC data - already exists")
+  } else {
+    tryCatch(
+      {
+        missforest_imputed_full <- run_missforest(data_full)
+        write.csv(missforest_imputed_full, mf_full_path, row.names = FALSE)
+        message(paste("Saved:", mf_full_path))
+      },
+      error = function(e) {
+        message(paste("Error in missForest for real MIMIC data:", e$message))
+      }
+    )
+  }
 } else {
   warning(paste("Real MIMIC data file not found:", mimic_file))
 }

@@ -79,57 +79,51 @@ The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV 
 
 ## Reproduction Workflow
 
-### Step 1: Data Simulation (Optional - for sensitivity analysis)
+### Step 1: Data Simulation (Sensitivity Analysis)
+Generate synthetic datasets at multiple missingness rates (10.00%, 26.8%, 40.01%, 54.98%) under MCAR, MAR, and MNAR mechanisms.
 ```bash
-Rscript scripts/01_data_simulation.R
+Rscript src/missingness/data_simulation.R
 ```
-**Output:** `simulated_cohort_full.csv`, `simulated_cohort_mcar.csv`, etc.
+**Output:** Synthetic datasets in `Results sensitivity/` named `synthetic_[mechanism]_[rate].csv`.
 
 ### Step 2: Missing Data Imputation
+Apply GAIN, MIDA, MICE, and missForest to the synthetic datasets.
 ```bash
 # R-based methods (MICE, missForest)
-Rscript scripts/02_imputation_r.R
+Rscript src/missingness/imputation_r.R
 
 # Python-based methods (GAIN, MIDA)
-python scripts/03_imputation_python.py
+python src/missingness/imputation_python.py
 ```
-**Output:** 32 imputed datasets in `data/imputed/`
+**Output:** Imputed datasets in `Results sensitivity/`.
 
-### Step 3: Standardize Data Columns
-**Critical:** Run this before survival analysis to fix column names (Time -> Survival_Time, Event -> Status).
+### Step 3: Train Survival Models & Sensitivity Evaluation
+Train RSF and benchmark models on all imputed datasets and evaluate performance across missingness rates.
 ```bash
-python fix_dataset_columns.py
+python src/models/survival_models.py
 ```
+**Output:** `model_performance_sensitivity_analysis.csv` and `model_performance_summary_sensitivity.csv`.
 
-### Step 4: Train Survival Models
+### Step 4: Full Cohort Analysis (Primary Result)
 ```bash
-python scripts/04_survival_models.py
-```
-**Output:** Model predictions, C-index, IBS, time-dependent AUC
-
-### Step 5: Full Cohort Analysis (Primary Result)
-```bash
-# Generate RSF predictions on full cohort
-python scripts/07_generate_python_predictions.py
+# Generate RSF predictions on full cohort (MIMIC-IV)
+python src/evaluation/generate_full_cohort_predictions.py
 
 # Perform log-rank test and calculate survival probabilities
-Rscript scripts/08_FINAL_publication_analysis.R
+Rscript src/evaluation/FINAL_publication_analysis.R
 ```
 **Output:** 
 - `FINAL_logrank_test.csv` (p < 0.001)
 - `FINAL_survival_probabilities.csv` (30-day, 60-day survival)
-- Kaplan-Meier curves
+- Kaplan-Meier curves in `results/figures/`
 
-### Step 6: Generate Figures & Tables
+### Step 5: Generate Figures & Tables
 ```bash
-# Data visualizations
-Rscript scripts/05_visualize_data.R
-python scripts/06_visualize_model_performance.py
+# Sensitivity analysis plot
+python src/visualization/plot_sensitivity_analysis.py
 
-# Manuscript tables
-python scripts/utils/generate_table1.py
-python scripts/utils/generate_flowchart.py
-python scripts/utils/regenerate_figure_b1.py
+# Data visualizations and VIMP
+python src/evaluation/generate_publication_tables.py
 ```
 
 ---
@@ -151,6 +145,18 @@ python scripts/utils/regenerate_figure_b1.py
 - **Log-rank test:** p < 0.001
 - **30-day survival:** 79.4% (high-risk) vs 100% (low-risk)
 - **60-day survival:** 66.7% (high-risk) vs 100% (low-risk)
+
+### Sensitivity Analysis (Robustness across Missingness)
+
+Evaluation of RSF C-index across target missingness rates (10.00% to 54.98%):
+
+| Mechanism | Imputation | 10.00% | 26.8% | 40.01% | 54.98% |
+|-----------|------------|--------|-------|--------|--------|
+| **MCAR**  | GAIN       | 0.729  | 0.765 | 0.958  | 0.971  |
+| **MAR**   | GAIN       | 0.778  | 0.886 | 0.961  | 0.984  |
+| **MNAR**  | GAIN       | 0.696  | 0.922 | 0.873  | 0.977  |
+
+*Results demonstrate that deep learning-based imputers (GAIN/MIDA) maintain or improve RSF performance as missingness increases by capturing underlying clinical patterns.*
 
 ### Top Predictors (Variable Importance)
 

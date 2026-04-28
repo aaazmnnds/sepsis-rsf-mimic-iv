@@ -5,6 +5,11 @@ library(mice)
 # Set seed for reproducibility
 set.seed(42)
 
+# Output Configuration
+ROOT_DIR <- "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+output_dir <- file.path(ROOT_DIR, "Results sensitivity")
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
 # Set sample size (matching MIMIC-IV cohort)
 n <- 852
 
@@ -48,11 +53,11 @@ data1$Na <- 1.2 * data1$Cl + rnorm(n, mean = 0, sd = 1.5)
 data1$AST <- data1$ALT + 0.5 * rnorm(n, mean = 0, sd = 1)
 
 # Survival outcomes
-# Time-to-event (Time): Exponential
-data1$Time <- rexp(n, rate = 0.02)
+# Time-to-event (Survival_Time): Exponential
+data1$Survival_Time <- rexp(n, rate = 0.02)
 
-# Event indicator (Event): Binary
-data1$Event <- rbinom(n, 1, 0.069)
+# Event indicator (Status): Binary
+data1$Status <- rbinom(n, 1, 0.069)
 
 # Ensure logical bounds (e.g., GCS between 3 and 15, Age > 0)
 data1$GCS <- pmin(pmax(round(data1$GCS), 3), 15)
@@ -61,7 +66,7 @@ data1$RR <- pmax(data1$RR, 0)
 data1$HR <- pmax(data1$HR, 0)
 
 # Save Complete Data
-write.csv(data1, "synthetic_complete.csv", row.names = FALSE)
+write.csv(data1, file.path(output_dir, "synthetic_complete.csv"), row.names = FALSE)
 cat("Created 'synthetic_complete.csv' (n =", n, ")\n")
 
 # ---------------------------------------------------------
@@ -146,49 +151,79 @@ apply_variable_specific_missingness <- function(data, miss_rates, mechanism = "M
   return(data_miss)
 }
 
-# --- MCAR (Missing Completely at Random) ---
-cat("\nGenerating MCAR dataset with variable-specific missingness...\n")
-data_mcar <- apply_variable_specific_missingness(data1, miss_rates, mechanism = "MCAR")
-write.csv(data_mcar, "synthetic_mcar.csv", row.names = FALSE)
-cat("Created 'synthetic_mcar.csv'\n")
-
-# --- MAR (Missing at Random) ---
-cat("\nGenerating MAR dataset with variable-specific missingness...\n")
-data_mar <- apply_variable_specific_missingness(data1, miss_rates, mechanism = "MAR")
-write.csv(data_mar, "synthetic_mar.csv", row.names = FALSE)
-cat("Created 'synthetic_mar.csv'\n")
-
-# --- MNAR (Missing Not at Random) ---
-cat("\nGenerating MNAR dataset with variable-specific missingness...\n")
-data_mnar <- apply_variable_specific_missingness(data1, miss_rates, mechanism = "MNAR")
-write.csv(data_mnar, "synthetic_mnar.csv", row.names = FALSE)
-cat("Created 'synthetic_mnar.csv'\n")
-
-# ---------------------------------------------------------
-# 3. Validation Summary
-# ---------------------------------------------------------
-cat("\n======================================================================\n")
-cat("                    MISSINGNESS VALIDATION SUMMARY                    \n")
-cat("======================================================================\n\n")
-
-check_miss_detailed <- function(df, name) {
-  cat("--- ", name, " Dataset ---\n", sep = "")
-  # Overall missingness
-  overall_miss <- mean(is.na(df))
-  cat("Overall Missingness: ", round(overall_miss * 100, 2), "%\n\n", sep = "")
-
-  # Variable-specific missingness
-  cat("Variable-Specific Missingness:\n")
-  for (var in names(miss_rates)) {
-    var_miss <- sum(is.na(df[[var]])) / nrow(df) * 100
-    expected <- miss_rates[[var]] * 100
-    cat(sprintf("  %-6s: %5.2f%% (Expected: %5.2f%%)\n", var, var_miss, expected))
-  }
-  cat("\n")
+# Define target missingness rates for sensitivity analysis (Response to Reviewer 2.10)
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args) > 0) {
+  # Convert e.g., "10" "40" to 0.10, 0.40
+  # Note: Use 26.8 for the baseline rate
+  target_rates <- as.numeric(args) / 100
+  cat(sprintf("Running simulation for specified rates: %s%%\n", paste(args, collapse=", ")))
+} else {
+  target_rates <- c(0.1000, 0.268, 0.4001, 0.5498)
+  cat("No rates specified. Running full suite: 10.00%, 26.8%, 40.01%, 54.98%\n")
 }
 
-check_miss_detailed(data_mcar, "MCAR")
-check_miss_detailed(data_mar, "MAR")
-check_miss_detailed(data_mnar, "MNAR")
+# Proportional Scaling Formula:
+# ScaleFactor = TargetRate / 0.268
+# This maintains the clinical hierarchy (e.g., ALT always higher missingness than Sodium)
 
+# Function to find the optimal scaling factor to hit an OVERALL target rate
+# across 13 variables, even when some are capped at 95%
+get_scaled_rates <- function(baseline_rates, target_total_rate, n_total_vars) {
+  target_sum <- target_total_rate * n_total_vars
+  
+  # Optimization function: Difference between achieved sum and target sum
+  f <- function(k) {
+    sum(pmin(unlist(baseline_rates) * k, 0.95)) - target_sum
+  }
+  
+  # Find optimal k using uniroot (search between 0.1 and 20x scaling)
+  # If target is impossible (e.g. > 65%), it will catch at the upper bound
+  k_opt <- tryCatch({
+    uniroot(f, lower=0.1, upper=50)$root
+  }, error = function(e) 50)
+  
+  return(lapply(baseline_rates, function(r) min(r * k_opt, 0.95)))
+}
+
+for (target_rate in target_rates) {
+  cat(sprintf("\n\n>>> GENERATING DATASETS FOR TARGET RATE: %.1f%% <<<\n", target_rate * 100))
+  
+  # Use target-seeking scaling instead of simple multiplication
+  current_miss_rates <- get_scaled_rates(miss_rates, target_rate, 13)
+  
+  # Log the new "effective" scaling for transparency
+  actual_sum <- sum(unlist(current_miss_rates))
+  cat(sprintf("Targeting total missingness sum: %.2f (Avg: %.2f%% across 13 variables)\n", 
+              actual_sum, (actual_sum/13)*100))
+  
+  mechanisms <- c("MCAR", "MAR", "MNAR")
+  
+  for (mech in mechanisms) {
+    # 1. Apply missingness
+    data_miss <- apply_variable_specific_missingness(data1, current_miss_rates, mechanism = mech)
+    
+    # 2. Verify achieved rate
+    # Total cells = N * 13 (Age, Sex, ALT, AST, Lac, Na, Cl, Plt, HR, RR, GCS, Time, Event)
+    actual_rate <- mean(is.na(data_miss[, c("Age", "Sex", "ALT", "AST", "Lac", "Na", "Cl", "Plt", "HR", "RR", "GCS", "Time", "Event")]))
+    
+    # 3. Save file with rate-specific naming
+    # Use '26.8' for baseline, others as integers for cleaner naming
+    rate_label <- if(target_rate == 0.268) "26.8" else as.character(target_rate * 100)
+    filename <- sprintf("synthetic_%s_%s.csv", tolower(mech), rate_label)
+    full_path <- file.path(output_dir, filename)
+    
+    write.csv(data_miss, full_path, row.names = FALSE)
+    
+    # 4. Report status
+    status <- if(abs(actual_rate - target_rate) < 0.005) "PASSED" else "WARNING: OFF-TARGET"
+    cat(sprintf("  [%s] Saved %-25s | Actual Rate: %5.2f%% | Target: %5.1f%% | %s\n", 
+                mech, filename, actual_rate * 100, target_rate * 100, status))
+  }
+}
+
+cat("\n\n======================================================================\n")
+cat("SENSITIVITY ANALYSIS DATA GENERATION COMPLETED\n")
+cat("Formula used: r_scaled = min(r_baseline * (target / 0.268), 0.95)\n")
+cat("Reference: Response to Reviewer 2.10\n")
 cat("======================================================================\n")

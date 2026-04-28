@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
+import argparse
 
 # Set seeds for reproducibility
 torch.manual_seed(42)
@@ -211,15 +212,39 @@ def run_gain(data, alpha=100, epochs=500, batch_size=64):
 # ==============================================================================
 
 def main():
-    files = glob.glob("synthetic_*.csv")
+    # Absolute Path Configuration
+    ROOT_DIR = "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+    DATA_DIR = os.path.join(ROOT_DIR, "Results sensitivity")
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run GAIN/MIDA imputation on synthetic datasets.')
+    parser.add_argument('--rates', nargs='+', help='Specific missingness rates to process (e.g., 10 40 55)')
+    args = parser.parse_args()
+
+    files = glob.glob(os.path.join(DATA_DIR, "synthetic_*.csv"))
     files = [f for f in files if "complete" not in f]
 
+    # Filter by rates if specified
+    if args.rates:
+        print(f"Filtering for specific rates: {args.rates}")
+        filtered_files = []
+        for f in files:
+            # Check if any of the target rates are in the filename (e.g., _10.csv)
+            if any(f"_{rate}.csv" in f for rate in args.rates):
+                filtered_files.append(f)
+        files = filtered_files
+        print(f"Files remaining after filtering: {len(files)}")
+
     if not files:
-        print("No synthetic data files found (synthetic_*.csv).")
+        print("No matching synthetic data files found.")
         return
 
+    # Create output directory
+    output_dir = os.path.join(ROOT_DIR, "Results sensitivity")
+    os.makedirs(output_dir, exist_ok=True)
+
     for file in files:
-        mechanism = file.replace("synthetic_", "").replace(".csv", "")
+        mechanism = os.path.basename(file).replace("synthetic_", "").replace(".csv", "")
         print(f"\nProcessing mechanism: {mechanism}")
 
         # Determine separability of non-numeric data if any, but simulation script usually produces numeric
@@ -231,30 +256,36 @@ def main():
         data_numeric = df.select_dtypes(include=[np.number]).values
 
         # 1. Run MIDA
-        try:
-            mida_imputed = run_mida(data_numeric)
-            mida_df = pd.DataFrame(mida_imputed, columns=df.select_dtypes(include=[np.number]).columns)
-            filename = f"imputed_MIDA_{mechanism}.csv"
-            mida_df.to_csv(filename, index=False)
-            print(f"Saved: {filename}")
-        except Exception as e:
-            print(f"Error in MIDA for {mechanism}: {e}")
+        filename_mida = os.path.join(output_dir, f"MIDA_{mechanism}.csv")
+        if os.path.exists(filename_mida):
+            print(f"Skipping MIDA for {mechanism} - already exists at {filename_mida}")
+        else:
+            try:
+                mida_imputed = run_mida(data_numeric)
+                mida_df = pd.DataFrame(mida_imputed, columns=df.select_dtypes(include=[np.number]).columns)
+                mida_df.to_csv(filename_mida, index=False)
+                print(f"Saved: {filename_mida}")
+            except Exception as e:
+                print(f"Error in MIDA for {mechanism}: {e}")
 
         # 2. Run GAIN
-        try:
-            gain_imputed = run_gain(data_numeric)
-            gain_df = pd.DataFrame(gain_imputed, columns=df.select_dtypes(include=[np.number]).columns)
-            filename = f"imputed_GAIN_{mechanism}.csv"
-            gain_df.to_csv(filename, index=False)
-            print(f"Saved: {filename}")
-        except Exception as e:
-            print(f"Error in GAIN for {mechanism}: {e}")
+        filename_gain = os.path.join(output_dir, f"GAIN_{mechanism}.csv")
+        if os.path.exists(filename_gain):
+            print(f"Skipping GAIN for {mechanism} - already exists at {filename_gain}")
+        else:
+            try:
+                gain_imputed = run_gain(data_numeric)
+                gain_df = pd.DataFrame(gain_imputed, columns=df.select_dtypes(include=[np.number]).columns)
+                gain_df.to_csv(filename_gain, index=False)
+                print(f"Saved: {filename_gain}")
+            except Exception as e:
+                print(f"Error in GAIN for {mechanism}: {e}")
 
     # ==============================================================================
     # Process Real MIMIC Data
     # ==============================================================================
 
-    mimic_file = "mimic_sepsis_cohort_full.csv"
+    mimic_file = os.path.join(ROOT_DIR, "mimic_sepsis_cohort_full.csv")
 
     if os.path.exists(mimic_file):
         print(f"\nProcessing real MIMIC data: {mimic_file}")
@@ -266,24 +297,30 @@ def main():
         data_numeric_full = df_full.select_dtypes(include=[np.number]).values
 
         # 1. Run MIDA
-        try:
-            mida_imputed_full = run_mida(data_numeric_full)
-            mida_df_full = pd.DataFrame(mida_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
-            filename_mida_full = "imputed_MIDA_mimic_sepsis_cohort_full.csv"
-            mida_df_full.to_csv(filename_mida_full, index=False)
-            print(f"Saved: {filename_mida_full}")
-        except Exception as e:
-            print(f"Error in MIDA for real MIMIC data: {e}")
+        filename_mida_full = os.path.join(output_dir, "MIDA_mimic_sepsis_cohort_full.csv")
+        if os.path.exists(filename_mida_full):
+            print(f"Skipping MIDA for real MIMIC data - already exists")
+        else:
+            try:
+                mida_imputed_full = run_mida(data_numeric_full)
+                mida_df_full = pd.DataFrame(mida_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
+                mida_df_full.to_csv(filename_mida_full, index=False)
+                print(f"Saved: {filename_mida_full}")
+            except Exception as e:
+                print(f"Error in MIDA for real MIMIC data: {e}")
 
         # 2. Run GAIN
-        try:
-            gain_imputed_full = run_gain(data_numeric_full)
-            gain_df_full = pd.DataFrame(gain_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
-            filename_gain_full = "imputed_GAIN_mimic_sepsis_cohort_full.csv"
-            gain_df_full.to_csv(filename_gain_full, index=False)
-            print(f"Saved: {filename_gain_full}")
-        except Exception as e:
-            print(f"Error in GAIN for real MIMIC data: {e}")
+        filename_gain_full = os.path.join(output_dir, "GAIN_mimic_sepsis_cohort_full.csv")
+        if os.path.exists(filename_gain_full):
+            print(f"Skipping GAIN for real MIMIC data - already exists")
+        else:
+            try:
+                gain_imputed_full = run_gain(data_numeric_full)
+                gain_df_full = pd.DataFrame(gain_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
+                gain_df_full.to_csv(filename_gain_full, index=False)
+                print(f"Saved: {filename_gain_full}")
+            except Exception as e:
+                print(f"Error in GAIN for real MIMIC data: {e}")
     else:
         print(f"\nWarning: Real MIMIC data file not found: {mimic_file}")
 
