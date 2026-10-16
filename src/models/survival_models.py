@@ -122,7 +122,7 @@ def run_deepsurv(X, y, learning_rate=1e-3):
 # ----------------------------------------------------------------------------
 def run_cv_evaluation(model_func, X, y, model_name="Model", 
                       n_splits=10, random_state=42, 
-                      n_repeats=5, **kwargs):
+                      n_repeats=5, return_oof=False, **kwargs):
     """
     Repeated stratified k-fold cross-validation.
     n_repeats=5 runs 5 independent 10-fold CV iterations
@@ -130,6 +130,8 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
     """
     all_fold_scores = []
     repeat_means = []
+    oof_predictions = []
+    failed_folds_count = 0
     
     for repeat in range(n_repeats):
         repeat_seed = random_state + repeat
@@ -138,7 +140,7 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
         fold_scores = []
         stratify_label = y["Status"]
         
-        for train_idx, val_idx in skf.split(X, stratify_label):
+        for fold_num, (train_idx, val_idx) in enumerate(skf.split(X, stratify_label), 1):
             X_fold_train = X[train_idx]
             X_fold_val = X[val_idx]
             y_fold_train = y[train_idx]
@@ -169,8 +171,13 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
                     risk_scores)[0]
                 fold_scores.append(c)
                 all_fold_scores.append(c)
+
+                if return_oof:
+                    for p_idx, score in zip(val_idx, risk_scores):
+                        oof_predictions.append((repeat, int(p_idx), float(score)))
             except Exception as e:
-                print(f"      Repeat {repeat+1} Fold Error: {e}")
+                failed_folds_count += 1
+                print(f"WARNING: Fold evaluation failed - Repeat {repeat+1}, Fold {fold_num}, Val Patients {len(val_idx)}, Error: {e}")
         
         if fold_scores:
             repeat_mean = np.mean(fold_scores)
@@ -183,6 +190,8 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
     print(f"    Overall Mean CV C-index ({n_repeats}x{n_splits}-fold): "
           f"{overall_mean:.4f} (+/- {overall_std:.4f})")
     
+    if return_oof:
+        return all_fold_scores, repeat_means, oof_predictions, failed_folds_count
     return all_fold_scores, repeat_means
 
 # ----------------------------------------------------------------------------
@@ -305,7 +314,7 @@ def main():
             imputed_files = glob.glob(rel_data_path)
 
     # Filter out unwanted files (raw synthetic and other MI artifacts)
-    imputed_files = [f for f in imputed_files if 'dataset_MI' not in f and not os.path.basename(f).startswith('synthetic_') and not os.path.basename(f).startswith('model_') and not os.path.basename(f).startswith('variable_') and not os.path.basename(f).startswith('sensitivity_')]
+    imputed_files = [f for f in imputed_files if 'dataset_MI' not in f and not os.path.basename(f).startswith('synthetic_') and not os.path.basename(f).startswith('model_') and not os.path.basename(f).startswith('variable_') and not os.path.basename(f).startswith('sensitivity_') and not os.path.basename(f).startswith('statistical_')]
     if not imputed_files:
         print("No imputed datasets found matching 'imputed_*.csv'.")
         return
@@ -350,6 +359,7 @@ def main():
             test_ibs_estimates = []
             test_auc_estimates = {3.0: [], 7.0: [], 14.0: []} # Storage for AUCs
             pooled_risk_scores = None
+            mice_oof_imputations = []
 
             for i, file_path in enumerate(sorted(mice_files), 1):
                 print(f"  Processing imputation {i}/{m}")
@@ -369,9 +379,21 @@ def main():
                     print(f"    [Diagnostic] Test set size: {len(y_test)}, Events: {n_events_test}")
 
                 # CV
-                all_fold_scores, repeat_means = run_cv_evaluation(
-                    model_func, X_train, y_train, 
-                    model_name=model_name, n_repeats=5)
+                is_real_data = ("mimic" in mechanism.lower() or mechanism.lower() == "full")
+                if is_real_data:
+                    all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
+                        model_func, X_train, y_train, 
+                        model_name=model_name, n_repeats=5, return_oof=is_real_data)
+                    if failed_folds > 0:
+                        print(f"WARNING: {failed_folds} fold(s) failed in MICE imputation {i} for {model_name}.")
+                    oof_mat = np.zeros((5, len(y_train)))
+                    for r, p_idx, score in oof_predictions:
+                        oof_mat[r, p_idx] = score
+                    mice_oof_imputations.append((oof_mat, failed_folds))
+                else:
+                    all_fold_scores, repeat_means = run_cv_evaluation(
+                        model_func, X_train, y_train, 
+                        model_name=model_name, n_repeats=5, return_oof=is_real_data)
                 # Use all fold scores for Rubin pooling
                 for fold_idx, score in enumerate(all_fold_scores[:10]):
                     cv_estimates[fold_idx].append(score)
@@ -608,9 +630,20 @@ def main():
                 continue
             print(f"  [{model_name}]")
             # CV
-            all_fold_scores, repeat_means = run_cv_evaluation(
-                model_func, X_train, y_train,
-                model_name=model_name, n_repeats=5)
+            is_real_data = ("mimic" in missing_mechanism.lower() or missing_mechanism.lower() == "full")
+            if is_real_data:
+                all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
+                    model_func, X_train, y_train,
+                    model_name=model_name, n_repeats=5, return_oof=is_real_data)
+                if failed_folds > 0:
+                    print(f"WARNING: {failed_folds} fold(s) failed in {imputation_method} for {model_name}.")
+                oof_mat = np.zeros((5, len(y_train)))
+                for r, p_idx, score in oof_predictions:
+                    oof_mat[r, p_idx] = score
+            else:
+                all_fold_scores, repeat_means = run_cv_evaluation(
+                    model_func, X_train, y_train,
+                    model_name=model_name, n_repeats=5, return_oof=is_real_data)
                 
             # Record overall CV performance
             performance_records.append({
