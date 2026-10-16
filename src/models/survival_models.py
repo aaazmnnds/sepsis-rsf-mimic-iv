@@ -646,7 +646,9 @@ def main():
                 continue
 
             print(f"\n[MICE - {model_name}]")
-            cv_estimates = {fold: [] for fold in range(10)}
+            cv_imp_means = []
+            cv_imp_vars = []
+            cv_imp_sds = []
             cv_repeat_stability = {}
             test_c_estimates = []
             test_ibs_estimates = []
@@ -689,8 +691,9 @@ def main():
                         model_func, X_train, y_train, 
                         model_name=model_name, n_repeats=5, return_oof=is_real_data)
                 # Use all fold scores for Rubin pooling
-                for fold_idx, score in enumerate(all_fold_scores[:10]):
-                    cv_estimates[fold_idx].append(score)
+                cv_imp_means.append(np.mean(all_fold_scores))
+                cv_imp_vars.append(np.var(all_fold_scores, ddof=1) / len(all_fold_scores))
+                cv_imp_sds.append(np.std(all_fold_scores))
                 # Store repeat stability
                 cv_repeat_stability[i] = np.std(repeat_means) if repeat_means else 0
 
@@ -772,25 +775,21 @@ def main():
 
             # Pooling Logic
             # CV Pooling
-            for fold_idx in range(10):
-                 if len(cv_estimates[fold_idx]) == m:
-                     pooled_cv, _, pooled_se, ci_l, ci_u = rubins_pooling(cv_estimates[fold_idx], [0.01]*m, m)
-                     # Parse mechanism and rate (e.g., mcar_10)
-                     mech_parts = mechanism.split("_")
-                     mech_label = mech_parts[0].upper()
-                     rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
-                     
-                     performance_records.append({
-                         "Imputation": "MICE (pooled)", 
-                         "Mechanism": mech_label, 
-                         "Missingness_Rate": rate_label,
-                         "Model": model_name, 
-                         "Metric": "C-index (CV)", 
-                         "Fold": fold_idx+1, 
-                         "Value": pooled_cv, 
-                         "CI_Lower": ci_l, 
-                         "CI_Upper": ci_u
-                     })
+            if len(cv_imp_means) == m:
+                pooled_cv, _, pooled_se, ci_l, ci_u = rubins_pooling(cv_imp_means, cv_imp_vars, m)
+                performance_records.append({
+                    "Imputation": "MICE (pooled)",
+                    "Mechanism": mech_label,
+                    "Missingness_Rate": rate_label,
+                    "Model": model_name,
+                    "Metric": "C-index (CV)",
+                    "Fold": "All",
+                    "Value": pooled_cv,
+                    "CV_SD": float(np.mean(cv_imp_sds)),
+                    "Repeat_SD": float(np.mean(list(cv_repeat_stability.values()))) if cv_repeat_stability else 0,
+                    "CI_Lower": float(np.clip(ci_l, 0.0, 1.0)),
+                    "CI_Upper": float(np.clip(ci_u, 0.0, 1.0))
+                })
 
             # Test Pooling C-index
             if len(test_c_estimates) == m:
