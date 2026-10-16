@@ -407,6 +407,146 @@ def bootstrap_test_metrics(y_train, y_test, risk_scores, model=None, X_test_scal
         "aucs": auc_results
     }
 
+def run_rsf_calibration_and_optimism(X_train, y_train, oof_matrix, model_func, random_state=42):
+    import numpy as np
+    import pandas as pd
+    from sklearn.preprocessing import StandardScaler
+    from sksurv.linear_model import CoxPHSurvivalAnalysis
+    from sksurv.nonparametric import kaplan_meier_estimator
+    from sksurv.metrics import concordance_index_censored
+
+    n_patients = len(y_train)
+
+    def eval_step_at_30(fn):
+        if 30.0 < fn.x[0]:
+            return 1.0
+        elif 30.0 >= fn.x[-1]:
+            return float(fn.y[-1])
+        else:
+            return float(fn(30.0))
+
+    def eval_km_at_30(times, surv):
+        if 30.0 < times[0]:
+            return 1.0
+        elif 30.0 >= times[-1]:
+            return float(surv[-1])
+        else:
+            idx = np.searchsorted(times, 30.0, side='right') - 1
+            return float(surv[idx])
+
+    # a) Calibration slope & b) Calibration in the large at 30 days, OUT-OF-FOLD
+    # Calibration-in-the-large from the out-of-fold Cox model, not a logistic intercept.
+    pooled_oof = np.mean(oof_matrix, axis=0)
+    log_risk = np.log(np.clip(pooled_oof, 1e-8, None)).reshape(-1, 1)
+
+    cph = CoxPHSurvivalAnalysis()
+    cph.fit(log_risk, y_train)
+    slope_pt = float(cph.coef_[0])
+
+    surv_funcs = cph.predict_survival_function(log_risk)
+    pred_surv_30 = float(np.mean([eval_step_at_30(fn) for fn in surv_funcs]))
+    km_times, km_surv = kaplan_meier_estimator(y_train["Status"], y_train["Survival_Time"])
+    obs_surv_30 = eval_km_at_30(km_times, km_surv)
+    intercept_pt = float(pred_surv_30 - obs_surv_30)
+
+    # 1000 patient bootstrap draws for slope & intercept
+    rng = np.random.RandomState(random_state)
+    slope_boots = []
+    intercept_boots = []
+    valid_cal_count = 0
+
+    for _ in range(1000):
+        b_idx = rng.choice(n_patients, n_patients, replace=True)
+        y_b = y_train[b_idx]
+        if len(np.unique(y_b["Status"])) < 2:
+            continue
+        try:
+            log_risk_b = log_risk[b_idx]
+            cph_b = CoxPHSurvivalAnalysis()
+            cph_b.fit(log_risk_b, y_b)
+            s_b = float(cph_b.coef_[0])
+            if np.isnan(s_b):
+                continue
+
+            surv_funcs_b = cph_b.predict_survival_function(log_risk_b)
+            pred_b = float(np.mean([eval_step_at_30(fn) for fn in surv_funcs_b]))
+            km_t_b, km_s_b = kaplan_meier_estimator(y_b["Status"], y_b["Survival_Time"])
+            obs_b = eval_km_at_30(km_t_b, km_s_b)
+            ic_b = float(pred_b - obs_b)
+            if np.isnan(ic_b):
+                continue
+
+            slope_boots.append(s_b)
+            intercept_boots.append(ic_b)
+            valid_cal_count += 1
+        except Exception:
+            continue
+
+    if valid_cal_count > 0:
+        slope_lo = float(np.percentile(slope_boots, 2.5))
+        slope_hi = float(np.percentile(slope_boots, 97.5))
+        intercept_lo = float(np.percentile(intercept_boots, 2.5))
+        intercept_hi = float(np.percentile(intercept_boots, 97.5))
+    else:
+        slope_lo, slope_hi = np.nan, np.nan
+        intercept_lo, intercept_hi = np.nan, np.nan
+
+    slope_res = (slope_pt, slope_lo, slope_hi, valid_cal_count)
+    intercept_res = (intercept_pt, intercept_lo, intercept_hi, valid_cal_count)
+
+    # c) Optimism-corrected C-index (supplementary), B=200
+    # Supplementary; the out-of-fold pooled C-index is the primary estimate; imputation is not repeated inside the bootstrap.
+    scaler_orig = StandardScaler()
+    X_train_scaled = scaler_orig.fit_transform(X_train)
+    orig_model = model_func(X_train_scaled, y_train, random_state=random_state)
+    apparent_risk = orig_model.predict(X_train_scaled)
+    apparent_c = float(concordance_index_censored(y_train["Status"], y_train["Survival_Time"], apparent_risk)[0])
+
+    optimism_draws = []
+    valid_opt_count = 0
+
+    for b in range(200):
+        b_idx = rng.choice(n_patients, n_patients, replace=True)
+        y_b = y_train[b_idx]
+        if len(np.unique(y_b["Status"])) < 2:
+            continue
+        try:
+            X_b = X_train[b_idx]
+            scaler_b = StandardScaler()
+            X_b_scaled = scaler_b.fit_transform(X_b)
+            X_orig_scaled_by_b = scaler_b.transform(X_train)
+
+            model_b = model_func(X_b_scaled, y_b, random_state=random_state + b)
+            risk_b = model_b.predict(X_b_scaled)
+            risk_orig = model_b.predict(X_orig_scaled_by_b)
+
+            c_app = float(concordance_index_censored(y_b["Status"], y_b["Survival_Time"], risk_b)[0])
+            c_orig = float(concordance_index_censored(y_train["Status"], y_train["Survival_Time"], risk_orig)[0])
+
+            if np.isnan(c_app) or np.isnan(c_orig):
+                continue
+
+            optimism_draws.append(c_app - c_orig)
+            valid_opt_count += 1
+        except Exception:
+            continue
+
+    if valid_opt_count > 0:
+        optimism_val = float(np.mean(optimism_draws))
+        corrected_c = float(apparent_c - optimism_val)
+    else:
+        optimism_val = np.nan
+        corrected_c = np.nan
+
+    optimism_res = (corrected_c, optimism_val, valid_opt_count)
+
+    return {
+        "slope": slope_res,
+        "intercept_30d": intercept_res,
+        "optimism_c": optimism_res
+    }
+
+
 def save_checkpoint(checkpoint_file, new_records):
     """Append new records to checkpoint file."""
     if not new_records:
@@ -513,7 +653,7 @@ def main():
             test_auc_estimates = {3.0: [], 7.0: [], 14.0: []} # Storage for AUCs
             pooled_risk_scores = None
             mice_oof_imputations = []
-            last_y_train, last_model, last_X_test_scaled = None, None, None
+            last_X_train, last_y_train, last_model, last_X_test_scaled = None, None, None, None
 
             for i, file_path in enumerate(sorted(mice_files), 1):
                 print(f"  Processing imputation {i}/{m}")
@@ -622,6 +762,7 @@ def main():
 
                     if pooled_risk_scores is None: pooled_risk_scores = np.zeros_like(risk_scores)
                     pooled_risk_scores += risk_scores
+                    last_X_train = X_train
                     last_y_train = y_train
                     last_model = model
                     last_X_test_scaled = X_test_scaled
@@ -828,6 +969,90 @@ def main():
                             "CI_Lower": np.nan,
                             "CI_Upper": np.nan
                         })
+
+                # Calibration and optimism analysis for RSF (real data only, failed folds == 0)
+                if model_name == "RSF" and last_X_train is not None:
+                    cal_opt_res = run_rsf_calibration_and_optimism(
+                        last_X_train, last_y_train, pooled_oof_mat, run_rsf, random_state=42
+                    )
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Slope",
+                        "Fold": "CV",
+                        "Value": cal_opt_res["slope"][0],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": cal_opt_res["slope"][1],
+                        "CI_Upper": cal_opt_res["slope"][2]
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Slope_ValidBoot",
+                        "Fold": "CV",
+                        "Value": float(cal_opt_res["slope"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Intercept_30d",
+                        "Fold": "Full",
+                        "Value": cal_opt_res["intercept_30d"][0],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": cal_opt_res["intercept_30d"][1],
+                        "CI_Upper": cal_opt_res["intercept_30d"][2]
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Intercept_30d_ValidBoot",
+                        "Fold": "Full",
+                        "Value": float(cal_opt_res["intercept_30d"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "C-index (Optimism-Corrected, Supplementary)",
+                        "Fold": "Full",
+                        "Value": cal_opt_res["optimism_c"][0],
+                        "CV_SD": cal_opt_res["optimism_c"][1],
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Optimism_ValidBoot",
+                        "Fold": "Full",
+                        "Value": float(cal_opt_res["optimism_c"][2]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
 
             # Checkpoint saving for MICE combination
             current_mice_records = [r for r in performance_records if r["Imputation"] == "MICE (pooled)" and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
@@ -1187,6 +1412,90 @@ def main():
                             "CI_Lower": np.nan,
                             "CI_Upper": np.nan
                         })
+
+                # Calibration and optimism analysis for RSF (real data only, failed folds == 0)
+                if model_name == "RSF":
+                    cal_opt_res = run_rsf_calibration_and_optimism(
+                        X_train, y_train, oof_mat, run_rsf, random_state=42
+                    )
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Slope",
+                        "Fold": "CV",
+                        "Value": cal_opt_res["slope"][0],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": cal_opt_res["slope"][1],
+                        "CI_Upper": cal_opt_res["slope"][2]
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Slope_ValidBoot",
+                        "Fold": "CV",
+                        "Value": float(cal_opt_res["slope"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Intercept_30d",
+                        "Fold": "Full",
+                        "Value": cal_opt_res["intercept_30d"][0],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": cal_opt_res["intercept_30d"][1],
+                        "CI_Upper": cal_opt_res["intercept_30d"][2]
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Calibration_Intercept_30d_ValidBoot",
+                        "Fold": "Full",
+                        "Value": float(cal_opt_res["intercept_30d"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "C-index (Optimism-Corrected, Supplementary)",
+                        "Fold": "Full",
+                        "Value": cal_opt_res["optimism_c"][0],
+                        "CV_SD": cal_opt_res["optimism_c"][1],
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "Optimism_ValidBoot",
+                        "Fold": "Full",
+                        "Value": float(cal_opt_res["optimism_c"][2]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
 
             # Checkpoint saving for single file combination
             current_single_records = [r for r in performance_records if r["Imputation"] == imputation_method and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
