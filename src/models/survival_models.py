@@ -13,6 +13,42 @@ import xgboost
 
 # ... [Keep imports and model definitions RSF to DeepSurv unchanged] ...
 
+# FIX R1.8/R2.5: Imputation inside train/test split boundary
+def impute_train_test(X_train_raw, X_test_raw, method="GAIN"):
+    """
+    Fit imputer on training data only, transform both train and test.
+    Prevents data leakage across train/test boundary.
+    """
+    if method == "GAIN":
+        import sys; sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); from missingness.imputation_python import run_gain
+        X_train_imputed = run_gain(X_train_raw)
+        train_means = np.nanmean(X_train_raw, axis=0)
+        X_test_imputed = X_test_raw.copy()
+        for col in range(X_test_raw.shape[1]):
+            mask = np.isnan(X_test_raw[:, col])
+            X_test_imputed[mask, col] = train_means[col]
+        return X_train_imputed, X_test_imputed
+    elif method == "MIDA":
+        from missingness.imputation_python import run_mida
+        X_train_imputed = run_mida(X_train_raw)
+        train_means = np.nanmean(X_train_raw, axis=0)
+        X_test_imputed = X_test_raw.copy()
+        for col in range(X_test_raw.shape[1]):
+            mask = np.isnan(X_test_raw[:, col])
+            X_test_imputed[mask, col] = train_means[col]
+        return X_train_imputed, X_test_imputed
+    else:
+        train_means = np.nanmean(X_train_raw, axis=0)
+        X_train_imputed = X_train_raw.copy()
+        X_test_imputed = X_test_raw.copy()
+        for col in range(X_train_raw.shape[1]):
+            mask_train = np.isnan(X_train_raw[:, col])
+            mask_test = np.isnan(X_test_raw[:, col])
+            X_train_imputed[mask_train, col] = train_means[col]
+            X_test_imputed[mask_test, col] = train_means[col]
+        return X_train_imputed, X_test_imputed
+
+
 # ----------------------------------------------------------------------------
 # 1. Random Survival Forest (Primary Method)
 # ----------------------------------------------------------------------------
@@ -34,7 +70,8 @@ def run_xgboost_survival(X, y, params=None):
             "objective": "survival:cox",
             "eval_metric": "cox-nloglik",
             "tree_method": "hist",
-            "device": "cpu"
+            "device": "cpu",
+            "seed": 42
         }
     y_xgb = np.where(y['Status'], y['Survival_Time'], -y['Survival_Time'])
     dtrain = xgboost.DMatrix(X, label=y_xgb)
@@ -57,9 +94,13 @@ def run_deepsurv(X, y, learning_rate=1e-3):
     DeepSurv implementation with regularization to address Reviewer concerns about overfitting.
     Added Dropout and reduced epochs.
     """
+    import random
     import torchtuples as tt
     from pycox.models import CoxPH
     import torch
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
     torch.set_num_threads(1) # Prevent deadlocks on Mac
     X = X.astype('float32')
     y_time = y['Survival_Time'].astype('float32')
@@ -79,40 +120,70 @@ def run_deepsurv(X, y, learning_rate=1e-3):
 # ----------------------------------------------------------------------------
 # Cross-Validation Helper
 # ----------------------------------------------------------------------------
-def run_cv_evaluation(model_func, X, y, model_name="Model", n_splits=10, random_state=42, **kwargs):
-    print(f"    Running {n_splits}-Fold CV for {model_name}...")
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-    c_indexes = []
-    stratify_label = y["Status"]
-    fold = 1
-    for train_idx, val_idx in skf.split(X, stratify_label):
-        X_fold_train, X_fold_val = X[train_idx], X[val_idx]
-        y_fold_train, y_fold_val = y[train_idx], y[val_idx]
-        scaler = StandardScaler()
-        X_fold_train_scaled = scaler.fit_transform(X_fold_train)
-        X_fold_val_scaled = scaler.transform(X_fold_val)
-        try:
-            model = model_func(X_fold_train_scaled, y_fold_train, **kwargs)
-            if hasattr(model, "predict"):
+def run_cv_evaluation(model_func, X, y, model_name="Model", 
+                      n_splits=10, random_state=42, 
+                      n_repeats=5, **kwargs):
+    """
+    Repeated stratified k-fold cross-validation.
+    n_repeats=5 runs 5 independent 10-fold CV iterations
+    with different random seeds to assess stability.
+    """
+    all_fold_scores = []
+    repeat_means = []
+    
+    for repeat in range(n_repeats):
+        repeat_seed = random_state + repeat
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, 
+                              random_state=repeat_seed)
+        fold_scores = []
+        stratify_label = y["Status"]
+        
+        for train_idx, val_idx in skf.split(X, stratify_label):
+            X_fold_train = X[train_idx]
+            X_fold_val = X[val_idx]
+            y_fold_train = y[train_idx]
+            y_fold_val = y[val_idx]
+            
+            scaler = StandardScaler()
+            X_fold_train_scaled = scaler.fit_transform(X_fold_train)
+            X_fold_val_scaled = scaler.transform(X_fold_val)
+            
+            try:
+                model = model_func(X_fold_train_scaled, 
+                                   y_fold_train, **kwargs)
                 if model_name == "XGBoost":
                     dval = xgboost.DMatrix(X_fold_val_scaled)
                     risk_scores = model.predict(dval)
                 elif model_name == "DeepSurv":
-                    risk_scores = model.predict(X_fold_val_scaled.astype('float32'))
-                    if risk_scores.ndim > 1: risk_scores = risk_scores.ravel()
+                    risk_scores = model.predict(
+                        X_fold_val_scaled.astype('float32'))
+                    if risk_scores.ndim > 1:
+                        risk_scores = risk_scores.ravel()
                 else:
                     risk_scores = model.predict(X_fold_val_scaled)
-
+                    
                 from sksurv.metrics import concordance_index_censored
-                c = concordance_index_censored(y_fold_val["Status"], y_fold_val["Survival_Time"], risk_scores)[0]
-                c_indexes.append(c)
-        except Exception as e:
-            print(f"      Fold {fold} Error: {e}")
-        fold += 1
-    mean_c = np.mean(c_indexes) if c_indexes else 0
-    std_c = np.std(c_indexes) if c_indexes else 0
-    print(f"    Mean CV C-index: {mean_c:.4f} (+/- {std_c:.4f})")
-    return c_indexes
+                c = concordance_index_censored(
+                    y_fold_val["Status"], 
+                    y_fold_val["Survival_Time"], 
+                    risk_scores)[0]
+                fold_scores.append(c)
+                all_fold_scores.append(c)
+            except Exception as e:
+                print(f"      Repeat {repeat+1} Fold Error: {e}")
+        
+        if fold_scores:
+            repeat_mean = np.mean(fold_scores)
+            repeat_means.append(repeat_mean)
+            print(f"    Repeat {repeat+1}/{n_repeats} Mean: "
+                  f"{repeat_mean:.4f} (+/- {np.std(fold_scores):.4f})")
+    
+    overall_mean = np.mean(all_fold_scores) if all_fold_scores else 0
+    overall_std = np.std(all_fold_scores) if all_fold_scores else 0
+    print(f"    Overall Mean CV C-index ({n_repeats}x{n_splits}-fold): "
+          f"{overall_mean:.4f} (+/- {overall_std:.4f})")
+    
+    return all_fold_scores, repeat_means
 
 # ----------------------------------------------------------------------------
 # Rubin's Rules Pooling
@@ -132,7 +203,8 @@ def prepare_features(df):
     if "Time" in df.columns: df.rename(columns={"Time": "Survival_Time"}, inplace=True)
     if "Event" in df.columns: df.rename(columns={"Event": "Status"}, inplace=True)
     
-    X_df = df.drop(columns=['Survival_Time', 'Status'])
+    EXCLUDE = ['Survival_Time', 'Status', 'subject_id', 'hadm_id']
+    X_df = df.drop(columns=[c for c in EXCLUDE if c in df.columns])
     X_df = pd.get_dummies(X_df, drop_first=True)
     return X_df
 
@@ -151,12 +223,52 @@ def group_mice_files(files):
     return mice_groups, single_files
 
 # ----------------------------------------------------------------------------
+# Checkpoint Helpers
+# ----------------------------------------------------------------------------
+def norm_rate(r):
+    try: return str(float(r))
+    except: return str(r)
+
+def is_already_processed(checkpoint_file, imputation, mechanism, rate, model):
+    """Check if this combination exists in checkpoint file."""
+    if not os.path.exists(checkpoint_file):
+        return False
+    try:
+        df = pd.read_csv(checkpoint_file)
+        mask = (
+            (df["Imputation"] == imputation) &
+            (df["Mechanism"] == mechanism) &
+            (df["Missingness_Rate"].apply(norm_rate) == norm_rate(rate)) &
+            (df["Model"] == model)
+        )
+        return mask.any()
+    except Exception:
+        return False
+
+def save_checkpoint(checkpoint_file, new_records):
+    """Append new records to checkpoint file."""
+    if not new_records:
+        return
+    new_df = pd.DataFrame(new_records)
+    if os.path.exists(checkpoint_file):
+        try:
+            existing_df = pd.read_csv(checkpoint_file)
+            combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+        except Exception:
+            combined_df = new_df
+    else:
+        combined_df = new_df
+    combined_df.to_csv(checkpoint_file, index=False)
+    print(f"Checkpoint saved: {len(combined_df)} total records")
+
+# ----------------------------------------------------------------------------
 # Main Execution Loop
 # ----------------------------------------------------------------------------
 def main():
     # Absolute Root Configuration
     ROOT_DIR = "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
     RESULTS_DIR = os.path.join(ROOT_DIR, "Results sensitivity")
+    checkpoint_file = os.path.join(RESULTS_DIR, "model_performance_sensitivity_analysis.csv")
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--deepsurv", action="store_true", help="Only run DeepSurv model")
@@ -193,7 +305,7 @@ def main():
             imputed_files = glob.glob(rel_data_path)
 
     # Filter out unwanted files (raw synthetic and other MI artifacts)
-    imputed_files = [f for f in imputed_files if 'dataset_MI' not in f and not os.path.basename(f).startswith('synthetic_')]
+    imputed_files = [f for f in imputed_files if 'dataset_MI' not in f and not os.path.basename(f).startswith('synthetic_') and not os.path.basename(f).startswith('model_') and not os.path.basename(f).startswith('variable_') and not os.path.basename(f).startswith('sensitivity_')]
     if not imputed_files:
         print("No imputed datasets found matching 'imputed_*.csv'.")
         return
@@ -221,9 +333,19 @@ def main():
         else:
             models_to_run = all_models
 
+        # Parse mechanism and rate (e.g., mcar_10)
+        mech_parts = mechanism.split("_")
+        mech_label = mech_parts[0].upper()
+        rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
+
         for model_name, model_func in models_to_run:
+            if is_already_processed(checkpoint_file, "MICE (pooled)", mech_label, rate_label, model_name):
+                print(f"  [MICE - {model_name}] Already processed - skipping")
+                continue
+
             print(f"\n[MICE - {model_name}]")
             cv_estimates = {fold: [] for fold in range(10)}
+            cv_repeat_stability = {}
             test_c_estimates = []
             test_ibs_estimates = []
             test_auc_estimates = {3.0: [], 7.0: [], 14.0: []} # Storage for AUCs
@@ -247,9 +369,14 @@ def main():
                     print(f"    [Diagnostic] Test set size: {len(y_test)}, Events: {n_events_test}")
 
                 # CV
-                cv_scores = run_cv_evaluation(model_func, X_train, y_train, model_name=model_name)
-                for fold_idx, score in enumerate(cv_scores):
+                all_fold_scores, repeat_means = run_cv_evaluation(
+                    model_func, X_train, y_train, 
+                    model_name=model_name, n_repeats=5)
+                # Use all fold scores for Rubin pooling
+                for fold_idx, score in enumerate(all_fold_scores[:10]):
                     cv_estimates[fold_idx].append(score)
+                # Store repeat stability
+                cv_repeat_stability[i] = np.std(repeat_means) if repeat_means else 0
 
                 # Test
                 try:
@@ -331,7 +458,7 @@ def main():
                      # Parse mechanism and rate (e.g., mcar_10)
                      mech_parts = mechanism.split("_")
                      mech_label = mech_parts[0].upper()
-                     rate_label = mech_parts[1] if len(mech_parts) > 1 else "26.8"
+                     rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
                      
                      performance_records.append({
                          "Imputation": "MICE (pooled)", 
@@ -391,8 +518,12 @@ def main():
                         "CI_Upper": ci_u_a
                     })
 
-            # Save pooled predictions
-            if pooled_risk_scores is not None:
+            # Checkpoint saving for MICE combination
+            current_mice_records = [r for r in performance_records if r["Imputation"] == "MICE (pooled)" and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
+            save_checkpoint(checkpoint_file, current_mice_records)
+
+            # Save pooled predictions (real data only)
+            if pooled_risk_scores is not None and mechanism.lower() == "full":
                 avg_risk_scores = pooled_risk_scores / m
                 for idx in range(len(y_test)):
                     prediction_records.append({
@@ -428,11 +559,34 @@ def main():
         missing_mechanism = "_".join(parts[1:])
 
         print(f"\nProcessing Single: {imputation_method} - {missing_mechanism}")
-        df = pd.read_csv(file_path)
-        X_df = prepare_features(df)
-        y = Surv.from_dataframe("Status", "Survival_Time", df)
-        X = X_df.values.astype(float)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.10, random_state=42, stratify=y["Status"])
+        # FIX R1.8/R2.5: Isolate GAIN and MIDA imputation within 
+        # train/test split to prevent data leakage
+        if imputation_method in ["GAIN", "MIDA"]:
+            base_name = os.path.basename(file_path)
+            if "mimic" in base_name.lower():
+                raw_file = os.path.join(ROOT_DIR, "data", "raw", "mimic_sepsis_cohort_full.csv")
+                if not os.path.exists(raw_file):
+                    raw_file = os.path.join(ROOT_DIR, "mimic_sepsis_cohort_full.csv")
+            else:
+                raw_file = file_path.replace(f"{imputation_method}_", "synthetic_")
+            df_raw = pd.read_csv(raw_file)
+            X_df_raw = prepare_features(df_raw)
+            y = Surv.from_dataframe("Status", "Survival_Time", df_raw)
+            X_raw = X_df_raw.values.astype(float)
+            X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+                X_raw, y, test_size=0.10, random_state=42, stratify=y["Status"]
+            )
+            X_train, X_test = impute_train_test(
+                X_train_raw, X_test_raw, method=imputation_method
+            )
+        else:
+            df = pd.read_csv(file_path)
+            X_df = prepare_features(df)
+            y = Surv.from_dataframe("Status", "Survival_Time", df)
+            X = X_df.values.astype(float)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.10, random_state=42, stratify=y["Status"]
+            )
 
         all_models = [("RSF", run_rsf), ("XGBoost", run_xgboost_survival),
                       ("GradientBoosting", run_gradient_boosting), ("DeepSurv", run_deepsurv)]
@@ -446,21 +600,47 @@ def main():
         # Parse mechanism and rate (e.g., mcar_10 or mcar)
         mech_parts = missing_mechanism.split("_")
         mech_label = mech_parts[0].upper()
-        rate_label = mech_parts[1] if len(mech_parts) > 1 else "26.8"
+        rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
 
         for model_name, model_func in models_to_run:
+            if is_already_processed(checkpoint_file, imputation_method, mech_label, rate_label, model_name):
+                print(f"  [{model_name}] Already processed - skipping")
+                continue
             print(f"  [{model_name}]")
             # CV
-            cv_scores = run_cv_evaluation(model_func, X_train, y_train, model_name=model_name)
-            for i, score in enumerate(cv_scores):
+            all_fold_scores, repeat_means = run_cv_evaluation(
+                model_func, X_train, y_train,
+                model_name=model_name, n_repeats=5)
+                
+            # Record overall CV performance
+            performance_records.append({
+                "Imputation": imputation_method,
+                "Mechanism": mech_label,
+                "Missingness_Rate": rate_label,
+                "Model": model_name,
+                "Metric": "C-index (CV)",
+                "Fold": "All",
+                "Value": np.mean(all_fold_scores),
+                "CV_SD": np.std(all_fold_scores),
+                "Repeat_SD": np.std(repeat_means) if repeat_means else 0,
+                "CI_Lower": np.mean(all_fold_scores) - 1.96*np.std(all_fold_scores),
+                "CI_Upper": np.mean(all_fold_scores) + 1.96*np.std(all_fold_scores)
+            })
+
+            # Also record per-repeat means for stability plot
+            for r_idx, r_mean in enumerate(repeat_means):
                 performance_records.append({
-                    "Imputation": imputation_method, 
-                    "Mechanism": mech_label, 
+                    "Imputation": imputation_method,
+                    "Mechanism": mech_label,
                     "Missingness_Rate": rate_label,
-                    "Model": model_name, 
-                    "Metric": "C-index (CV)", 
-                    "Fold": i+1, 
-                    "Value": score
+                    "Model": model_name,
+                    "Metric": "C-index (CV-Repeat)",
+                    "Fold": f"Repeat_{r_idx+1}",
+                    "Value": r_mean,
+                    "CV_SD": np.nan,
+                    "Repeat_SD": np.nan,
+                    "CI_Lower": np.nan,
+                    "CI_Upper": np.nan
                 })
 
             # Test
@@ -487,8 +667,18 @@ def main():
                     "Value": c_test
                 })
 
-                # ... [Rest of prediction saving remains same] ...
-                # (Skipping lines for brevity in replace call)
+                # Save predictions for bootstrap comparison
+                if "mimic" in missing_mechanism.lower() or missing_mechanism == "full":
+                    for idx in range(len(y_test)):
+                        prediction_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": missing_mechanism,
+                            "Model": model_name,
+                            "Index": idx,
+                            "Observed_Time": y_test[idx]["Survival_Time"],
+                            "Observed_Status": y_test[idx]["Status"],
+                            "Predicted_Risk": risk_scores[idx]
+                        })
 
                 # IBS
                 if hasattr(model, "predict_survival_function"):
@@ -544,8 +734,17 @@ def main():
             except Exception as e:
                 print(f"    Test Failed: {e}")
 
+            # Checkpoint saving for single file combination
+            current_single_records = [r for r in performance_records if r["Imputation"] == imputation_method and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
+            save_checkpoint(checkpoint_file, current_single_records)
+
     # Summary
-    results_df = pd.DataFrame(performance_records)
+    # Summary
+    if os.path.exists(checkpoint_file):
+        results_df = pd.read_csv(checkpoint_file)
+    else:
+        results_df = pd.DataFrame(performance_records)
+
     if results_df.empty:
         print("\n" + "!"*70)
         print("ERROR: No successful model results were generated.")
@@ -553,24 +752,43 @@ def main():
         print("!"*70)
         return
 
-    results_df.to_csv(os.path.join(RESULTS_DIR, "model_performance_sensitivity_analysis.csv"), index=False)
-    print(f"Successfully processed {len(results_df)} total result rows.")
-    print(f"Saved: {os.path.join(RESULTS_DIR, 'model_performance_sensitivity_analysis.csv')}")
+    # Deduplicate in case of resume overlaps
+    results_df = results_df.drop_duplicates()
+    results_df.to_csv(checkpoint_file, index=False)
+    print(f"Successfully finalized {len(results_df)} total result rows.")
+    print(f"Saved: {checkpoint_file}")
 
-    # Save predictions
-    if prediction_records:
-        predictions_df = pd.DataFrame(prediction_records)
-        predictions_path = os.path.join(RESULTS_DIR, "model_predictions.csv")
-        predictions_df.to_csv(predictions_path, index=False)
+    # Save predictions (merge on resume and clean synthetic MICE)
+    predictions_path = os.path.join(RESULTS_DIR, "model_predictions.csv")
+    new_pred_df = pd.DataFrame(prediction_records) if prediction_records else pd.DataFrame()
+    if os.path.exists(predictions_path):
+        existing_pred_df = pd.read_csv(predictions_path)
+        combined_pred_df = pd.concat([existing_pred_df, new_pred_df], ignore_index=True) if not new_pred_df.empty else existing_pred_df
+    else:
+        combined_pred_df = new_pred_df
+
+    if not combined_pred_df.empty:
+        # Drop synthetic MICE rows
+        synthetic_mice_mask = (combined_pred_df["Imputation"] == "MICE (pooled)") & (combined_pred_df["Mechanism"].str.lower() != "full")
+        combined_pred_df = combined_pred_df[~synthetic_mice_mask]
+        combined_pred_df = combined_pred_df.drop_duplicates(subset=["Imputation", "Mechanism", "Model", "Index"])
+        combined_pred_df.to_csv(predictions_path, index=False)
         print(f"Saved: {predictions_path}")
     else:
         print("Warning: No predictions to save")
 
-    # Save variable importance
-    if vimp_records:
-        vimp_df = pd.DataFrame(vimp_records)
-        vimp_path = os.path.join(RESULTS_DIR, "variable_importance.csv")
-        vimp_df.to_csv(vimp_path, index=False)
+    # Save variable importance (merge on resume)
+    vimp_path = os.path.join(RESULTS_DIR, "variable_importance.csv")
+    new_vimp_df = pd.DataFrame(vimp_records) if vimp_records else pd.DataFrame()
+    if os.path.exists(vimp_path):
+        existing_vimp_df = pd.read_csv(vimp_path)
+        combined_vimp_df = pd.concat([existing_vimp_df, new_vimp_df], ignore_index=True) if not new_vimp_df.empty else existing_vimp_df
+    else:
+        combined_vimp_df = new_vimp_df
+
+    if not combined_vimp_df.empty:
+        combined_vimp_df = combined_vimp_df.drop_duplicates(subset=["Imputation", "Mechanism", "Imputation_Idx", "Model", "Feature"])
+        combined_vimp_df.to_csv(vimp_path, index=False)
         print(f"Saved: {vimp_path}")
     else:
         print("Warning: No variable importance to save")
