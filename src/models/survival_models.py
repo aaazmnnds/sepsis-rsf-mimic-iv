@@ -254,6 +254,159 @@ def is_already_processed(checkpoint_file, imputation, mechanism, rate, model):
     except Exception:
         return False
 
+def bootstrap_cv_pooled_cindex(y_train, oof_matrix, n_repeats=5, n_boot=1000, random_state=42):
+    """
+    Bootstrap CI for CV C-index pooled over patients for each repeat.
+    oof_matrix: shape (n_repeats, n_patients)
+    """
+    from sksurv.metrics import concordance_index_censored
+    n_patients = len(y_train)
+    # Mean of the 5 pooled C-indices on original OOF predictions
+    orig_c_per_rep = []
+    for r in range(n_repeats):
+        c_r = concordance_index_censored(y_train["Status"], y_train["Survival_Time"], oof_matrix[r])[0]
+        orig_c_per_rep.append(c_r)
+    mean_val = float(np.mean(orig_c_per_rep))
+
+    rng = np.random.RandomState(random_state)
+    boot_means = []
+    skipped_draws = 0
+    for _ in range(n_boot):
+        b_idx = rng.choice(n_patients, size=n_patients, replace=True)
+        y_b = y_train[b_idx]
+        if len(np.unique(y_b["Status"])) < 2:
+            skipped_draws += 1
+            continue
+        try:
+            c_per_rep = []
+            for r in range(n_repeats):
+                c_r = concordance_index_censored(y_b["Status"], y_b["Survival_Time"], oof_matrix[r, b_idx])[0]
+                c_per_rep.append(c_r)
+            boot_means.append(np.mean(c_per_rep))
+        except Exception:
+            skipped_draws += 1
+
+    valid_count = len(boot_means)
+    if boot_means:
+        ci_lower = float(np.clip(np.percentile(boot_means, 2.5), 0.0, 1.0))
+        ci_upper = float(np.clip(np.percentile(boot_means, 97.5), 0.0, 1.0))
+    else:
+        ci_lower, ci_upper = np.nan, np.nan
+
+    return mean_val, ci_lower, ci_upper, valid_count
+
+def bootstrap_test_metrics(y_train, y_test, risk_scores, model=None, X_test_scaled=None, 
+                           auc_times=(3.0, 7.0, 14.0), n_boot=1000, random_state=42):
+    """
+    Bootstrap test-set metrics (C-index, IBS, AUC) with 95% CIs and event counts.
+    """
+    from sksurv.metrics import concordance_index_censored, cumulative_dynamic_auc, integrated_brier_score
+    n_test = len(y_test)
+    rng = np.random.RandomState(random_state)
+    boot_indices = [rng.choice(n_test, size=n_test, replace=True) for _ in range(n_boot)]
+
+    # 1. C-index
+    c_test_val = float(concordance_index_censored(y_test["Status"], y_test["Survival_Time"], risk_scores)[0])
+    c_boots = []
+    c_skipped = 0
+    for b_idx in boot_indices:
+        y_b = y_test[b_idx]
+        if len(np.unique(y_b["Status"])) < 2:
+            c_skipped += 1
+            continue
+        try:
+            c_b = concordance_index_censored(y_b["Status"], y_b["Survival_Time"], risk_scores[b_idx])[0]
+            c_boots.append(c_b)
+        except Exception:
+            c_skipped += 1
+    c_valid = len(c_boots)
+    c_ci_l = float(np.clip(np.percentile(c_boots, 2.5), 0.0, 1.0)) if c_boots else np.nan
+    c_ci_u = float(np.clip(np.percentile(c_boots, 97.5), 0.0, 1.0)) if c_boots else np.nan
+
+    # 2. IBS
+    ibs_val, ibs_ci_l, ibs_ci_u = np.nan, np.nan, np.nan
+    ibs_valid = 0
+    if model is not None and hasattr(model, "predict_survival_function") and X_test_scaled is not None:
+        try:
+            times = np.percentile(y_test["Survival_Time"], np.linspace(5, 95, 15))
+            surv_funcs = model.predict_survival_function(X_test_scaled)
+            preds = [fn(times) for fn in surv_funcs] if hasattr(surv_funcs[0], "x") else surv_funcs
+            metrics_input = np.array(preds)
+            ibs_val = float(integrated_brier_score(y_train, y_test, metrics_input, times))
+            ibs_boots = []
+            ibs_skipped = 0
+            for b_idx in boot_indices:
+                y_b = y_test[b_idx]
+                if len(np.unique(y_b["Status"])) < 2:
+                    ibs_skipped += 1
+                    continue
+                try:
+                    b_ibs = integrated_brier_score(y_train, y_b, metrics_input[b_idx], times)
+                    ibs_boots.append(b_ibs)
+                except Exception:
+                    ibs_skipped += 1
+            ibs_valid = len(ibs_boots)
+            if ibs_boots:
+                ibs_ci_l = float(np.clip(np.percentile(ibs_boots, 2.5), 0.0, 1.0))
+                ibs_ci_u = float(np.clip(np.percentile(ibs_boots, 97.5), 0.0, 1.0))
+        except Exception:
+            pass
+
+    # 3. AUCs
+    auc_results = {}
+    for t in auc_times:
+        cases_mask = (y_test["Survival_Time"] <= t) & (y_test["Status"] == 1)
+        controls_mask = (y_test["Survival_Time"] > t)
+        n_events = int(np.sum(cases_mask))
+        n_controls = int(np.sum(controls_mask))
+
+        auc_val, auc_ci_l, auc_ci_u = np.nan, np.nan, np.nan
+        auc_valid = 0
+        if t < y_train["Survival_Time"].max() and n_events > 0 and n_controls > 0:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    orig_aucs, _ = cumulative_dynamic_auc(y_train, y_test, risk_scores, [t])
+                    auc_val = float(orig_aucs[0])
+
+                auc_boots = []
+                auc_skipped = 0
+                for b_idx in boot_indices:
+                    y_b = y_test[b_idx]
+                    b_cases = (y_b["Survival_Time"] <= t) & (y_b["Status"] == 1)
+                    b_controls = (y_b["Survival_Time"] > t)
+                    if not (b_cases.any() and b_controls.any()):
+                        auc_skipped += 1
+                        continue
+                    try:
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", RuntimeWarning)
+                            b_aucs, _ = cumulative_dynamic_auc(y_train, y_b, risk_scores[b_idx], [t])
+                            auc_boots.append(b_aucs[0])
+                    except Exception:
+                        auc_skipped += 1
+                auc_valid = len(auc_boots)
+                if auc_boots:
+                    auc_ci_l = float(np.clip(np.percentile(auc_boots, 2.5), 0.0, 1.0))
+                    auc_ci_u = float(np.clip(np.percentile(auc_boots, 97.5), 0.0, 1.0))
+            except Exception:
+                pass
+
+        auc_results[t] = {
+            "val": auc_val,
+            "ci_lower": auc_ci_l,
+            "ci_upper": auc_ci_u,
+            "n_events": n_events,
+            "n_controls": n_controls,
+            "valid_boot": auc_valid
+        }
+
+    return {
+        "c_index": (c_test_val, c_ci_l, c_ci_u, c_valid),
+        "ibs": (ibs_val, ibs_ci_l, ibs_ci_u, ibs_valid),
+        "aucs": auc_results
+    }
+
 def save_checkpoint(checkpoint_file, new_records):
     """Append new records to checkpoint file."""
     if not new_records:
@@ -360,6 +513,7 @@ def main():
             test_auc_estimates = {3.0: [], 7.0: [], 14.0: []} # Storage for AUCs
             pooled_risk_scores = None
             mice_oof_imputations = []
+            last_y_train, last_model, last_X_test_scaled = None, None, None
 
             for i, file_path in enumerate(sorted(mice_files), 1):
                 print(f"  Processing imputation {i}/{m}")
@@ -468,6 +622,9 @@ def main():
 
                     if pooled_risk_scores is None: pooled_risk_scores = np.zeros_like(risk_scores)
                     pooled_risk_scores += risk_scores
+                    last_y_train = y_train
+                    last_model = model
+                    last_X_test_scaled = X_test_scaled
 
                 except Exception as e:
                     print(f"    Error in imputation {i}: {e}")
@@ -539,6 +696,138 @@ def main():
                         "CI_Lower": ci_l_a, 
                         "CI_Upper": ci_u_a
                     })
+
+            # Add valid bootstrap CIs for real data groups
+            total_mice_failed_folds = sum(item[1] for item in mice_oof_imputations) if is_real_data else 0
+            if is_real_data and total_mice_failed_folds > 0:
+                print(f"  WARNING: {total_mice_failed_folds} total fold(s) failed across MICE imputations. Skipping CV-Pooled rows.")
+
+            if is_real_data and len(mice_oof_imputations) == m and last_y_train is not None and total_mice_failed_folds == 0:
+                # Average OOF risk scores across the m imputations per patient (shape: 5, n_patients)
+                pooled_oof_mat = np.mean([item[0] for item in mice_oof_imputations], axis=0)
+                mean_cv_p, ci_l_cv_p, ci_u_cv_p, cv_p_valid = bootstrap_cv_pooled_cindex(last_y_train, pooled_oof_mat, n_repeats=5, n_boot=1000, random_state=42)
+                performance_records.append({
+                    "Imputation": "MICE (pooled)",
+                    "Mechanism": mech_label,
+                    "Missingness_Rate": rate_label,
+                    "Model": model_name,
+                    "Metric": "C-index (CV-Pooled)",
+                    "Fold": "All",
+                    "Value": mean_cv_p,
+                    "CV_SD": np.nan,
+                    "Repeat_SD": np.nan,
+                    "CI_Lower": ci_l_cv_p,
+                    "CI_Upper": ci_u_cv_p
+                })
+                performance_records.append({
+                    "Imputation": "MICE (pooled)",
+                    "Mechanism": mech_label,
+                    "Missingness_Rate": rate_label,
+                    "Model": model_name,
+                    "Metric": "C-index_CVPooled_ValidBoot",
+                    "Fold": "All",
+                    "Value": float(cv_p_valid),
+                    "CV_SD": np.nan,
+                    "Repeat_SD": np.nan,
+                    "CI_Lower": np.nan,
+                    "CI_Upper": np.nan
+                })
+
+                # Bootstrap test-set metrics using pooled risk scores
+                if pooled_risk_scores is not None:
+                    avg_test_risk = pooled_risk_scores / m
+                    boot_test_res = bootstrap_test_metrics(
+                        last_y_train, y_test, avg_test_risk, model=last_model, 
+                        X_test_scaled=last_X_test_scaled, auc_times=AUC_TIMES, n_boot=1000, random_state=42
+                    )
+                    # Update CI_Lower and CI_Upper for existing test records
+                    for rec in performance_records:
+                        if rec["Imputation"] == "MICE (pooled)" and rec["Mechanism"] == mech_label and str(rec["Missingness_Rate"]) == str(rate_label) and rec["Model"] == model_name:
+                            if rec["Metric"] == "C-index (Test)":
+                                rec["CI_Lower"] = boot_test_res["c_index"][1]
+                                rec["CI_Upper"] = boot_test_res["c_index"][2]
+                            elif rec["Metric"] == "IBS (Test)":
+                                rec["CI_Lower"] = boot_test_res["ibs"][1]
+                                rec["CI_Upper"] = boot_test_res["ibs"][2]
+                            elif rec["Metric"].startswith("AUC_Day") and not rec["Metric"].endswith("_Events") and not rec["Metric"].endswith("_Controls") and not rec["Metric"].endswith("_ValidBoot"):
+                                try:
+                                    t_val = float(rec["Metric"].replace("AUC_Day", ""))
+                                    if t_val in boot_test_res["aucs"]:
+                                        rec["CI_Lower"] = boot_test_res["aucs"][t_val]["ci_lower"]
+                                        rec["CI_Upper"] = boot_test_res["aucs"][t_val]["ci_upper"]
+                                except Exception:
+                                    pass
+
+                    # Record valid bootstrap counts
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "C-index_Test_ValidBoot",
+                        "Fold": "Test",
+                        "Value": float(boot_test_res["c_index"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    if not np.isnan(boot_test_res["ibs"][0]):
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "IBS_Test_ValidBoot",
+                            "Fold": "Test",
+                            "Value": float(boot_test_res["ibs"][3]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+
+                    # Add event, control, and valid boot counts for AUC
+                    for t_val, a_info in boot_test_res["aucs"].items():
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_Events",
+                            "Fold": "Test",
+                            "Value": float(a_info["n_events"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_Controls",
+                            "Fold": "Test",
+                            "Value": float(a_info["n_controls"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_ValidBoot",
+                            "Fold": "Test",
+                            "Value": float(a_info["valid_boot"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
 
             # Checkpoint saving for MICE combination
             current_mice_records = [r for r in performance_records if r["Imputation"] == "MICE (pooled)" and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
@@ -766,6 +1055,135 @@ def main():
 
             except Exception as e:
                 print(f"    Test Failed: {e}")
+
+            # Add valid bootstrap CIs for real data groups
+            if is_real_data and failed_folds > 0:
+                print(f"  WARNING: {failed_folds} fold(s) failed in {imputation_method} for {model_name}. Skipping CV-Pooled rows.")
+
+            if is_real_data and failed_folds == 0:
+                # Bootstrap CV C-index pooled over patients
+                mean_cv_p, ci_l_cv_p, ci_u_cv_p, cv_p_valid = bootstrap_cv_pooled_cindex(y_train, oof_mat, n_repeats=5, n_boot=1000, random_state=42)
+                performance_records.append({
+                    "Imputation": imputation_method,
+                    "Mechanism": mech_label,
+                    "Missingness_Rate": rate_label,
+                    "Model": model_name,
+                    "Metric": "C-index (CV-Pooled)",
+                    "Fold": "All",
+                    "Value": mean_cv_p,
+                    "CV_SD": np.nan,
+                    "Repeat_SD": np.nan,
+                    "CI_Lower": ci_l_cv_p,
+                    "CI_Upper": ci_u_cv_p
+                })
+                performance_records.append({
+                    "Imputation": imputation_method,
+                    "Mechanism": mech_label,
+                    "Missingness_Rate": rate_label,
+                    "Model": model_name,
+                    "Metric": "C-index_CVPooled_ValidBoot",
+                    "Fold": "All",
+                    "Value": float(cv_p_valid),
+                    "CV_SD": np.nan,
+                    "Repeat_SD": np.nan,
+                    "CI_Lower": np.nan,
+                    "CI_Upper": np.nan
+                })
+
+                # Bootstrap test-set metrics
+                if "risk_scores" in locals() and risk_scores is not None:
+                    boot_test_res = bootstrap_test_metrics(
+                        y_train, y_test, risk_scores, model=model if "model" in locals() else None,
+                        X_test_scaled=X_test_scaled, auc_times=AUC_TIMES, n_boot=1000, random_state=42
+                    )
+                    # Update CI_Lower and CI_Upper for existing test records
+                    for rec in performance_records:
+                        if rec["Imputation"] == imputation_method and rec["Mechanism"] == mech_label and str(rec["Missingness_Rate"]) == str(rate_label) and rec["Model"] == model_name:
+                            if rec["Metric"] == "C-index (Test)":
+                                rec["CI_Lower"] = boot_test_res["c_index"][1]
+                                rec["CI_Upper"] = boot_test_res["c_index"][2]
+                            elif rec["Metric"] == "IBS (Test)":
+                                rec["CI_Lower"] = boot_test_res["ibs"][1]
+                                rec["CI_Upper"] = boot_test_res["ibs"][2]
+                            elif rec["Metric"].startswith("AUC_Day") and not rec["Metric"].endswith("_Events") and not rec["Metric"].endswith("_Controls") and not rec["Metric"].endswith("_ValidBoot"):
+                                try:
+                                    t_val = float(rec["Metric"].replace("AUC_Day", ""))
+                                    if t_val in boot_test_res["aucs"]:
+                                        rec["CI_Lower"] = boot_test_res["aucs"][t_val]["ci_lower"]
+                                        rec["CI_Upper"] = boot_test_res["aucs"][t_val]["ci_upper"]
+                                except Exception:
+                                    pass
+
+                    # Record valid bootstrap counts
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": "C-index_Test_ValidBoot",
+                        "Fold": "Test",
+                        "Value": float(boot_test_res["c_index"][3]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    if not np.isnan(boot_test_res["ibs"][0]):
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "IBS_Test_ValidBoot",
+                            "Fold": "Test",
+                            "Value": float(boot_test_res["ibs"][3]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+
+                    # Add event, control, and valid boot counts for AUC
+                    for t_val, a_info in boot_test_res["aucs"].items():
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_Events",
+                            "Fold": "Test",
+                            "Value": float(a_info["n_events"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_Controls",
+                            "Fold": "Test",
+                            "Value": float(a_info["n_controls"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": f"AUC_Day{int(t_val)}_ValidBoot",
+                            "Fold": "Test",
+                            "Value": float(a_info["valid_boot"]),
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
 
             # Checkpoint saving for single file combination
             current_single_records = [r for r in performance_records if r["Imputation"] == imputation_method and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
