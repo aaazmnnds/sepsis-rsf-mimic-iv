@@ -407,6 +407,80 @@ def bootstrap_test_metrics(y_train, y_test, risk_scores, model=None, X_test_scal
         "aucs": auc_results
     }
 
+def bootstrap_cv_pooled_auc(y_train, oof_matrix, auc_times=(3.0, 7.0, 14.0), n_boot=1000, random_state=42):
+    # Censoring weights are estimated from the same training outcomes, an approximation.
+    from sksurv.metrics import cumulative_dynamic_auc
+
+    n_patients = len(y_train)
+    max_time = np.max(y_train["Survival_Time"])
+    rng = np.random.RandomState(random_state)
+    boot_indices = [rng.choice(n_patients, n_patients, replace=True) for _ in range(n_boot)]
+
+    results = {}
+    for t in auc_times:
+        n_events = int(np.sum((y_train["Survival_Time"] <= t) & (y_train["Status"] == 1)))
+        n_controls = int(np.sum(y_train["Survival_Time"] > t))
+
+        if t >= max_time or n_events == 0 or n_controls == 0:
+            results[t] = {
+                "val": np.nan,
+                "ci_lower": np.nan,
+                "ci_upper": np.nan,
+                "n_events": n_events,
+                "n_controls": n_controls,
+                "valid_boot": 0
+            }
+            continue
+
+        try:
+            repeat_aucs = []
+            for r in range(5):
+                auc_r = float(cumulative_dynamic_auc(y_train, y_train, oof_matrix[r], [t])[0][0])
+                repeat_aucs.append(auc_r)
+            mean_val = float(np.mean(repeat_aucs))
+        except Exception:
+            mean_val = np.nan
+
+        boot_means = []
+        valid_count = 0
+        for b_idx in boot_indices:
+            y_b = y_train[b_idx]
+            b_events = np.sum((y_b["Survival_Time"] <= t) & (y_b["Status"] == 1))
+            b_controls = np.sum(y_b["Survival_Time"] > t)
+            if b_events == 0 or b_controls == 0:
+                continue
+            try:
+                draw_repeat_aucs = []
+                for r in range(5):
+                    auc_r_b = float(cumulative_dynamic_auc(y_b, y_b, oof_matrix[r, b_idx], [t])[0][0])
+                    draw_repeat_aucs.append(auc_r_b)
+                d_mean = float(np.mean(draw_repeat_aucs))
+                if np.isnan(d_mean):
+                    continue
+                boot_means.append(d_mean)
+                valid_count += 1
+            except Exception:
+                continue
+
+        if valid_count > 0:
+            ci_lower = float(np.clip(np.percentile(boot_means, 2.5), 0.0, 1.0))
+            ci_upper = float(np.clip(np.percentile(boot_means, 97.5), 0.0, 1.0))
+        else:
+            ci_lower = np.nan
+            ci_upper = np.nan
+
+        results[t] = {
+            "val": mean_val,
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+            "n_events": n_events,
+            "n_controls": n_controls,
+            "valid_boot": valid_count
+        }
+
+    return results
+
+
 def run_rsf_calibration_and_optimism(X_train, y_train, oof_matrix, model_func, random_state=42):
     import numpy as np
     import pandas as pd
@@ -873,6 +947,63 @@ def main():
                     "CI_Upper": np.nan
                 })
 
+                # Pooled out-of-fold time-dependent AUC for MICE
+                cv_auc_res = bootstrap_cv_pooled_auc(last_y_train, pooled_oof_mat, auc_times=AUC_TIMES, n_boot=1000, random_state=42)
+                for t_val, t_info in cv_auc_res.items():
+                    t_str = int(t_val)
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled",
+                        "Fold": "All",
+                        "Value": t_info["val"],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": t_info["ci_lower"],
+                        "CI_Upper": t_info["ci_upper"]
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_Events",
+                        "Fold": "All",
+                        "Value": float(t_info["n_events"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_Controls",
+                        "Fold": "All",
+                        "Value": float(t_info["n_controls"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": "MICE (pooled)",
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_ValidBoot",
+                        "Fold": "All",
+                        "Value": float(t_info["valid_boot"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+
                 # Bootstrap test-set metrics using pooled risk scores
                 if pooled_risk_scores is not None:
                     avg_test_risk = pooled_risk_scores / m
@@ -1316,6 +1447,63 @@ def main():
                     "CI_Lower": np.nan,
                     "CI_Upper": np.nan
                 })
+
+                # Pooled out-of-fold time-dependent AUC for Single Imputation
+                cv_auc_res = bootstrap_cv_pooled_auc(y_train, oof_mat, auc_times=AUC_TIMES, n_boot=1000, random_state=42)
+                for t_val, t_info in cv_auc_res.items():
+                    t_str = int(t_val)
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled",
+                        "Fold": "All",
+                        "Value": t_info["val"],
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": t_info["ci_lower"],
+                        "CI_Upper": t_info["ci_upper"]
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_Events",
+                        "Fold": "All",
+                        "Value": float(t_info["n_events"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_Controls",
+                        "Fold": "All",
+                        "Value": float(t_info["n_controls"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
+                    performance_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": mech_label,
+                        "Missingness_Rate": rate_label,
+                        "Model": model_name,
+                        "Metric": f"AUC_Day{t_str}_CVPooled_ValidBoot",
+                        "Fold": "All",
+                        "Value": float(t_info["valid_boot"]),
+                        "CV_SD": np.nan,
+                        "Repeat_SD": np.nan,
+                        "CI_Lower": np.nan,
+                        "CI_Upper": np.nan
+                    })
 
                 # Bootstrap test-set metrics
                 if risk_scores is not None:
