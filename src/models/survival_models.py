@@ -917,6 +917,9 @@ def main():
             if is_already_processed(checkpoint_file, imputation_method, mech_label, rate_label, model_name):
                 print(f"  [{model_name}] Already processed - skipping")
                 continue
+            risk_scores = None
+            model = None
+            X_test_scaled = None
             print(f"  [{model_name}]")
             # CV
             is_real_data = ("mimic" in missing_mechanism.lower() or missing_mechanism.lower() == "full")
@@ -1091,9 +1094,9 @@ def main():
                 })
 
                 # Bootstrap test-set metrics
-                if "risk_scores" in locals() and risk_scores is not None:
+                if risk_scores is not None:
                     boot_test_res = bootstrap_test_metrics(
-                        y_train, y_test, risk_scores, model=model if "model" in locals() else None,
+                        y_train, y_test, risk_scores, model=model,
                         X_test_scaled=X_test_scaled, auc_times=AUC_TIMES, n_boot=1000, random_state=42
                     )
                     # Update CI_Lower and CI_Upper for existing test records
