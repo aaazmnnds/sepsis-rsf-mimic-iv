@@ -11,6 +11,8 @@ import argparse
 import sys
 import xgboost
 
+COXNET_LOG = []
+
 # ... [Keep imports and model definitions RSF to DeepSurv unchanged] ...
 
 # FIX R1.8/R2.5: Imputation inside train/test split boundary
@@ -147,6 +149,7 @@ def run_coxnet_elasticnet(X, y, random_state=42):
         else:
             boundary_status = "interior alpha"
         print(f"    [Coxnet] Selected alpha={best_alpha:.6f} ({boundary_status})")
+        COXNET_LOG.append({"alpha": best_alpha, "alpha_min": min_alpha, "alpha_max": max_alpha, "kind": "fit"})
 
         refit_model = CoxnetSurvivalAnalysis(
             l1_ratio=0.5,
@@ -154,6 +157,7 @@ def run_coxnet_elasticnet(X, y, random_state=42):
             alphas=[best_alpha]
         )
         refit_model.fit(X, y)
+        COXNET_LOG.append({"kind": "refit_coef", "coefs": list(refit_model.coef_[:, 0])})
         return refit_model
 
 def run_coxnet_ridge(X, y, random_state=42):
@@ -214,6 +218,7 @@ def run_coxnet_ridge(X, y, random_state=42):
         else:
             boundary_status = "interior alpha"
         print(f"    [Coxnet] Selected alpha={best_alpha:.6f} ({boundary_status})")
+        COXNET_LOG.append({"alpha": best_alpha, "alpha_min": min_alpha, "alpha_max": max_alpha, "kind": "fit"})
 
         refit_model = CoxnetSurvivalAnalysis(
             l1_ratio=0.01,
@@ -221,6 +226,7 @@ def run_coxnet_ridge(X, y, random_state=42):
             alphas=[best_alpha]
         )
         refit_model.fit(X, y)
+        COXNET_LOG.append({"kind": "refit_coef", "coefs": list(refit_model.coef_[:, 0])})
         return refit_model
 
 def run_deepsurv(X, y, learning_rate=1e-3):
@@ -857,6 +863,9 @@ def main():
                 print(f"  [MICE - {model_name}] Already processed - skipping")
                 continue
 
+            if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                COXNET_LOG.clear()
+
             print(f"\n[MICE - {model_name}]")
             cv_imp_means = []
             cv_imp_vars = []
@@ -1335,6 +1344,46 @@ def main():
                             "Predicted_Risk": mean_oof_risk[idx]
                         })
 
+            # Log Coxnet selected alphas and refit coefficients
+            if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                fit_k = 1
+                for entry in COXNET_LOG:
+                    if entry.get("kind") == "fit":
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "Coxnet_Selected_Alpha",
+                            "Fold": f"fit-{fit_k}",
+                            "Value": entry["alpha"],
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": entry["alpha_min"],
+                            "CI_Upper": entry["alpha_max"]
+                        })
+                        fit_k += 1
+                last_refit = None
+                for entry in COXNET_LOG:
+                    if entry.get("kind") == "refit_coef":
+                        last_refit = entry
+                if last_refit is not None:
+                    mice_feature_names = X_df.columns
+                    for f_name, coef_val in zip(mice_feature_names, last_refit["coefs"]):
+                        performance_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "Coxnet_Coef",
+                            "Fold": f_name,
+                            "Value": coef_val,
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
+                        })
+
             # Checkpoint saving for MICE combination
             current_mice_records = [r for r in performance_records if r["Imputation"] == "MICE (pooled)" and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
             save_checkpoint(checkpoint_file, current_mice_records)
@@ -1427,6 +1476,8 @@ def main():
             if is_already_processed(checkpoint_file, imputation_method, mech_label, rate_label, model_name):
                 print(f"  [{model_name}] Already processed - skipping")
                 continue
+            if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                COXNET_LOG.clear()
             risk_scores = None
             model = None
             X_test_scaled = None
@@ -1866,6 +1917,46 @@ def main():
                             "Observed_Time": y_train[idx]["Survival_Time"],
                             "Observed_Status": y_train[idx]["Status"],
                             "Predicted_Risk": mean_oof_risk[idx]
+                        })
+
+            # Log Coxnet selected alphas and refit coefficients
+            if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                fit_k = 1
+                for entry in COXNET_LOG:
+                    if entry.get("kind") == "fit":
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "Coxnet_Selected_Alpha",
+                            "Fold": f"fit-{fit_k}",
+                            "Value": entry["alpha"],
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": entry["alpha_min"],
+                            "CI_Upper": entry["alpha_max"]
+                        })
+                        fit_k += 1
+                last_refit = None
+                for entry in COXNET_LOG:
+                    if entry.get("kind") == "refit_coef":
+                        last_refit = entry
+                if last_refit is not None:
+                    single_feature_names = X_df_raw.columns if imputation_method in ["GAIN", "MIDA"] else X_df.columns
+                    for f_name, coef_val in zip(single_feature_names, last_refit["coefs"]):
+                        performance_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": mech_label,
+                            "Missingness_Rate": rate_label,
+                            "Model": model_name,
+                            "Metric": "Coxnet_Coef",
+                            "Fold": f_name,
+                            "Value": coef_val,
+                            "CV_SD": np.nan,
+                            "Repeat_SD": np.nan,
+                            "CI_Lower": np.nan,
+                            "CI_Upper": np.nan
                         })
 
             # Checkpoint saving for single file combination
