@@ -79,7 +79,8 @@ def plot_sensitivity():
                 alpha=0.08
             )
         
-        ax.set_title(mech, fontsize=16, fontweight='bold', pad=12)
+        panel_letters = ["(A)", "(B)", "(C)"]
+        ax.set_title(f"{panel_letters[i]} {mech}", fontsize=16, fontweight='bold', pad=12)
         ax.set_xlabel("Overall missingness rate (%)", fontsize=13)
         if i == 0:
             ax.set_ylabel("Cross-validated C-index (mean, shaded: fold SD)", fontsize=13)
