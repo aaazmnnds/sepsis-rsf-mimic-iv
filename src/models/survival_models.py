@@ -132,9 +132,21 @@ def run_coxnet_elasticnet(X, y, random_state=42):
 
         if valid_folds == 0:
             raise RuntimeError("All CV folds failed during Coxnet ElasticNet penalty tuning.")
+        if valid_folds < 5:
+            print(f"WARNING: only {valid_folds} of 5 penalty-tuning folds succeeded")
 
         mean_scores = {alpha: np.mean(scores) for alpha, scores in alpha_scores.items() if len(scores) > 0}
         best_alpha = max(mean_scores, key=mean_scores.get)
+
+        min_alpha = np.min(candidate_alphas)
+        max_alpha = np.max(candidate_alphas)
+        if np.isclose(best_alpha, min_alpha):
+            boundary_status = "smallest candidate alpha"
+        elif np.isclose(best_alpha, max_alpha):
+            boundary_status = "largest candidate alpha"
+        else:
+            boundary_status = "interior alpha"
+        print(f"    [Coxnet] Selected alpha={best_alpha:.6f} ({boundary_status})")
 
         refit_model = CoxnetSurvivalAnalysis(
             l1_ratio=0.5,
@@ -187,9 +199,21 @@ def run_coxnet_ridge(X, y, random_state=42):
 
         if valid_folds == 0:
             raise RuntimeError("All CV folds failed during Coxnet Ridge penalty tuning.")
+        if valid_folds < 5:
+            print(f"WARNING: only {valid_folds} of 5 penalty-tuning folds succeeded")
 
         mean_scores = {alpha: np.mean(scores) for alpha, scores in alpha_scores.items() if len(scores) > 0}
         best_alpha = max(mean_scores, key=mean_scores.get)
+
+        min_alpha = np.min(candidate_alphas)
+        max_alpha = np.max(candidate_alphas)
+        if np.isclose(best_alpha, min_alpha):
+            boundary_status = "smallest candidate alpha"
+        elif np.isclose(best_alpha, max_alpha):
+            boundary_status = "largest candidate alpha"
+        else:
+            boundary_status = "interior alpha"
+        print(f"    [Coxnet] Selected alpha={best_alpha:.6f} ({boundary_status})")
 
         refit_model = CoxnetSurvivalAnalysis(
             l1_ratio=0.01,
@@ -811,7 +835,8 @@ def main():
         print(f"\n{'='*70}\nProcessing MICE Group: {mechanism}\n{'='*70}")
         m = len(mice_files)
         all_models = [("RSF", run_rsf), ("XGBoost", run_xgboost_survival),
-                      ("GradientBoosting", run_gradient_boosting), ("DeepSurv", run_deepsurv)]
+                      ("GradientBoosting", run_gradient_boosting), ("DeepSurv", run_deepsurv),
+                      ("CoxnetElasticNet", run_coxnet_elasticnet), ("CoxnetRidge", run_coxnet_ridge)]
         if args.deepsurv:
             models_to_run = [("DeepSurv", run_deepsurv)]
         elif args.skip_deepsurv:
@@ -825,6 +850,9 @@ def main():
         rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
 
         for model_name, model_func in models_to_run:
+            is_real_data = ("mimic" in mechanism.lower() or mechanism.lower() == "full")
+            if not is_real_data and model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                continue
             if is_already_processed(checkpoint_file, "MICE (pooled)", mech_label, rate_label, model_name):
                 print(f"  [MICE - {model_name}] Already processed - skipping")
                 continue
@@ -1365,7 +1393,8 @@ def main():
             )
 
         all_models = [("RSF", run_rsf), ("XGBoost", run_xgboost_survival),
-                      ("GradientBoosting", run_gradient_boosting), ("DeepSurv", run_deepsurv)]
+                      ("GradientBoosting", run_gradient_boosting), ("DeepSurv", run_deepsurv),
+                      ("CoxnetElasticNet", run_coxnet_elasticnet), ("CoxnetRidge", run_coxnet_ridge)]
         if args.deepsurv:
             models_to_run = [("DeepSurv", run_deepsurv)]
         elif args.skip_deepsurv:
@@ -1379,6 +1408,9 @@ def main():
         rate_label = norm_rate(mech_parts[1]) if len(mech_parts) > 1 else "26.8"
 
         for model_name, model_func in models_to_run:
+            is_real_data = ("mimic" in missing_mechanism.lower() or missing_mechanism.lower() == "full")
+            if not is_real_data and model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
+                continue
             if is_already_processed(checkpoint_file, imputation_method, mech_label, rate_label, model_name):
                 print(f"  [{model_name}] Already processed - skipping")
                 continue
