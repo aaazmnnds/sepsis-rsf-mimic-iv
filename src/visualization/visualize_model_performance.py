@@ -140,28 +140,48 @@ def plot_variable_importance():
 
     df = pd.read_csv("variable_importance.csv")
 
-    # Filter for RSF and Mechanism == 'full'
-    df_filtered = df[(df["Model"] == "RSF") & (df["Mechanism"].str.lower() == "full")]
+    # Filter for RSF and real data mechanisms (matches "full" and "mimic_sepsis_cohort_full")
+    df_filtered = df[(df["Model"] == "RSF") & (df["Mechanism"].str.lower().str.contains("full"))].copy()
 
     if df_filtered.empty:
-        print("No variable importance records found for RSF under Mechanism 'full'.")
+        print("No variable importance records found for RSF under Mechanism matching 'full'.")
         return
 
-    # Sort all 11 features by Importance_Mean descending (largest at top)
-    df_plot = df_filtered.sort_values(by="Importance_Mean", ascending=True).copy()
+    # Order features by mean of Importance_Mean across the four imputations descending (largest at top)
+    mean_imp = df_filtered.groupby("Feature")["Importance_Mean"].mean()
+    features_ordered = mean_imp.sort_values(ascending=False).index.tolist()
+
+    # Imputation methods in order
+    imputations = ["MICE", "missForest", "GAIN", "MIDA"]
+    colors = ["#4C72B0", "#55A868", "#C44E52", "#8172B3"]
+
+    n_features = len(features_ordered)
+    n_imputations = len(imputations)
+    y_pos = np.arange(n_features)
+    bar_height = 0.8 / n_imputations
 
     plt.figure(figsize=(10, 8))
     sns.set_style("whitegrid")
 
-    # Horizontal bar plot with error bars of one SD
-    plt.barh(df_plot["Feature"], df_plot["Importance_Mean"], xerr=df_plot["Importance_Std"],
-             capsize=4, color="steelblue", edgecolor="black", alpha=0.8)
+    # Grouped horizontal bars with one bar per imputation per feature
+    for i, imp in enumerate(imputations):
+        imp_data = df_filtered[df_filtered["Imputation"] == imp].set_index("Feature")
+        means = [imp_data.loc[f, "Importance_Mean"] if f in imp_data.index else np.nan for f in features_ordered]
+        stds = [imp_data.loc[f, "Importance_Std"] if f in imp_data.index else 0 for f in features_ordered]
+
+        offset = (i - (n_imputations - 1) / 2) * bar_height
+        plt.barh(y_pos + offset, means, height=bar_height, xerr=stds, capsize=3,
+                 label=imp, color=colors[i % len(colors)], edgecolor="black", alpha=0.85)
 
     plt.axvline(x=0, color="black", linestyle="--", linewidth=1)
 
-    plt.title("Permutation importance, RSF (real MIMIC-IV data)", fontsize=14)
+    plt.yticks(y_pos, features_ordered, fontsize=11)
+    plt.gca().invert_yaxis()  # Largest mean at the top
+
     plt.xlabel("Mean decrease in C-index (permutation importance)", fontsize=12)
     plt.ylabel("Feature", fontsize=12)
+    plt.title("Permutation importance, RSF (real MIMIC-IV data)", fontsize=14)
+    plt.legend(title="Imputation method", fontsize=10, title_fontsize=11)
 
     plt.tight_layout()
     plt.savefig("variable_importance.png", dpi=300)
