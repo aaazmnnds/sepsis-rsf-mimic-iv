@@ -49,6 +49,8 @@ class MIDA(nn.Module):
         return reconstruction
 
 def run_mida(data, epochs=500, batch_size=64):
+    torch.manual_seed(42)
+    np.random.seed(42)
     print("Running MIDA imputation...")
 
     # 1. Normalization (Min-Max)
@@ -132,6 +134,8 @@ class Discriminator(nn.Module):
         return self.main(inputs)
 
 def run_gain(data, alpha=100, epochs=500, batch_size=64):
+    torch.manual_seed(42)
+    np.random.seed(42)
     print("Running GAIN imputation...")
 
     dim = data.shape[1]
@@ -212,6 +216,9 @@ def run_gain(data, alpha=100, epochs=500, batch_size=64):
 # ==============================================================================
 
 def main():
+    # FIX: Define columns to exclude from imputation
+    EXCLUDE_COLS = ['subject_id', 'hadm_id', 'Time', 'Event', 
+                    'Survival_Time', 'Status']
     # Absolute Path Configuration
     ROOT_DIR = "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
     DATA_DIR = os.path.join(ROOT_DIR, "Results sensitivity")
@@ -253,7 +260,10 @@ def main():
 
         # Store non-numeric columns to append later if needed, assume all numeric for now based on simulation
         # If ID or non-numeric exists, drop for imputation
-        data_numeric = df.select_dtypes(include=[np.number]).values
+        # FIX: Exclude outcome and ID columns from imputation
+        feature_cols = [c for c in df.select_dtypes(include=[np.number]).columns 
+                        if c not in EXCLUDE_COLS]
+        data_numeric = df[feature_cols].values
 
         # 1. Run MIDA
         filename_mida = os.path.join(output_dir, f"MIDA_{mechanism}.csv")
@@ -262,7 +272,11 @@ def main():
         else:
             try:
                 mida_imputed = run_mida(data_numeric)
-                mida_df = pd.DataFrame(mida_imputed, columns=df.select_dtypes(include=[np.number]).columns)
+                mida_df = pd.DataFrame(mida_imputed, columns=feature_cols)
+                # Re-attach outcome and ID columns
+                for col in EXCLUDE_COLS:
+                    if col in df.columns:
+                        mida_df[col] = df[col].values
                 mida_df.to_csv(filename_mida, index=False)
                 print(f"Saved: {filename_mida}")
             except Exception as e:
@@ -275,7 +289,11 @@ def main():
         else:
             try:
                 gain_imputed = run_gain(data_numeric)
-                gain_df = pd.DataFrame(gain_imputed, columns=df.select_dtypes(include=[np.number]).columns)
+                gain_df = pd.DataFrame(gain_imputed, columns=feature_cols)
+                # Re-attach outcome and ID columns
+                for col in EXCLUDE_COLS:
+                    if col in df.columns:
+                        gain_df[col] = df[col].values
                 gain_df.to_csv(filename_gain, index=False)
                 print(f"Saved: {filename_gain}")
             except Exception as e:
@@ -294,7 +312,11 @@ def main():
         df_full = pd.read_csv(mimic_file)
 
         # Extract numeric columns only
-        data_numeric_full = df_full.select_dtypes(include=[np.number]).values
+        # FIX: Exclude outcome and ID columns from imputation
+        feature_cols_full = [c for c in df_full.select_dtypes(
+                            include=[np.number]).columns 
+                            if c not in EXCLUDE_COLS]
+        data_numeric_full = df_full[feature_cols_full].values
 
         # 1. Run MIDA
         filename_mida_full = os.path.join(output_dir, "MIDA_mimic_sepsis_cohort_full.csv")
@@ -303,7 +325,11 @@ def main():
         else:
             try:
                 mida_imputed_full = run_mida(data_numeric_full)
-                mida_df_full = pd.DataFrame(mida_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
+                mida_df_full = pd.DataFrame(mida_imputed_full, columns=feature_cols_full)
+                # Re-attach outcome and ID columns
+                for col in EXCLUDE_COLS:
+                    if col in df_full.columns:
+                        mida_df_full[col] = df_full[col].values
                 mida_df_full.to_csv(filename_mida_full, index=False)
                 print(f"Saved: {filename_mida_full}")
             except Exception as e:
@@ -316,7 +342,11 @@ def main():
         else:
             try:
                 gain_imputed_full = run_gain(data_numeric_full)
-                gain_df_full = pd.DataFrame(gain_imputed_full, columns=df_full.select_dtypes(include=[np.number]).columns)
+                gain_df_full = pd.DataFrame(gain_imputed_full, columns=feature_cols_full)
+                # Re-attach outcome and ID columns
+                for col in EXCLUDE_COLS:
+                    if col in df_full.columns:
+                        gain_df_full[col] = df_full[col].values
                 gain_df_full.to_csv(filename_gain_full, index=False)
                 print(f"Saved: {filename_gain_full}")
             except Exception as e:
