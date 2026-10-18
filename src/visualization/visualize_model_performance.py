@@ -140,36 +140,28 @@ def plot_variable_importance():
 
     df = pd.read_csv("variable_importance.csv")
 
-    # We want to show the Top 10 features for RSF across imputation methods
-    # Filter for RSF (should be the only one, but safe to filter)
-    df_rsf = df[df["Model"] == "RSF"]
+    # Filter for RSF and Mechanism == 'full'
+    df_filtered = df[(df["Model"] == "RSF") & (df["Mechanism"].str.lower() == "full")]
 
-    if df_rsf.empty:
-        print("No variable importance records found for RSF.")
+    if df_filtered.empty:
+        print("No variable importance records found for RSF under Mechanism 'full'.")
         return
 
-    # Aggregate importance across imputations (mean of means)
-    # Group by Imputation Method and Feature
-    df_agg = df_rsf.groupby(["Imputation", "Feature"])["Importance_Mean"].mean().reset_index()
-
-    # Find global Top 10 features (averaged across all imputation methods for simplicity)
-    # Or better: Pick one imputation method (e.g., MICE) as the reference for sorting
-    top_features = df_agg.groupby("Feature")["Importance_Mean"].mean().sort_values(ascending=False).head(10).index
-
-    # Filter data to only valid top features
-    df_plot = df_agg[df_agg["Feature"].isin(top_features)]
+    # Sort all 11 features by Importance_Mean descending (largest at top)
+    df_plot = df_filtered.sort_values(by="Importance_Mean", ascending=True).copy()
 
     plt.figure(figsize=(10, 8))
     sns.set_style("whitegrid")
 
-    # Bar plot: x=Importance, y=Feature, hue=Imputation
-    sns.barplot(data=df_plot, x="Importance_Mean", y="Feature", hue="Imputation",
-                order=top_features, palette="viridis")
+    # Horizontal bar plot with error bars of one SD
+    plt.barh(df_plot["Feature"], df_plot["Importance_Mean"], xerr=df_plot["Importance_Std"],
+             capsize=4, color="steelblue", edgecolor="black", alpha=0.8)
 
-    plt.title("Variable Importance (RSF Model)", fontsize=14)
-    plt.xlabel("Permutation Importance (Mean Decrease in Accuracy)", fontsize=12)
+    plt.axvline(x=0, color="black", linestyle="--", linewidth=1)
+
+    plt.title("Permutation importance, RSF (real MIMIC-IV data)", fontsize=14)
+    plt.xlabel("Mean decrease in C-index (permutation importance)", fontsize=12)
     plt.ylabel("Feature", fontsize=12)
-    plt.legend(title="Imputation Method", loc="lower right")
 
     plt.tight_layout()
     plt.savefig("variable_importance.png", dpi=300)
