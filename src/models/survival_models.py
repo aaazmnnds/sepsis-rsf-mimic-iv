@@ -89,6 +89,116 @@ def run_gradient_boosting(X, y, random_state=42):
     gbs.fit(X, y)
     return gbs
 
+def run_coxnet_elasticnet(X, y, random_state=42):
+    from sksurv.linear_model import CoxnetSurvivalAnalysis
+    from sksurv.metrics import concordance_index_censored
+    from sklearn.model_selection import StratifiedKFold
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        initial_model = CoxnetSurvivalAnalysis(
+            l1_ratio=0.5,
+            fit_baseline_model=True,
+            n_alphas=100,
+            alpha_min_ratio=0.01
+        )
+        initial_model.fit(X, y)
+        candidate_alphas = initial_model.alphas_
+
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+        alpha_scores = {alpha: [] for alpha in candidate_alphas}
+        valid_folds = 0
+
+        for train_idx, val_idx in skf.split(X, y["Status"]):
+            X_tr, y_tr = X[train_idx], y[train_idx]
+            X_va, y_va = X[val_idx], y[val_idx]
+
+            try:
+                fold_model = CoxnetSurvivalAnalysis(
+                    l1_ratio=0.5,
+                    alphas=candidate_alphas,
+                    fit_baseline_model=False
+                )
+                fold_model.fit(X_tr, y_tr)
+
+                for alpha in candidate_alphas:
+                    risk = fold_model.predict(X_va, alpha=alpha)
+                    c_idx = concordance_index_censored(y_va["Status"], y_va["Survival_Time"], risk)[0]
+                    alpha_scores[alpha].append(c_idx)
+                valid_folds += 1
+            except Exception:
+                continue
+
+        if valid_folds == 0:
+            raise RuntimeError("All CV folds failed during Coxnet ElasticNet penalty tuning.")
+
+        mean_scores = {alpha: np.mean(scores) for alpha, scores in alpha_scores.items() if len(scores) > 0}
+        best_alpha = max(mean_scores, key=mean_scores.get)
+
+        refit_model = CoxnetSurvivalAnalysis(
+            l1_ratio=0.5,
+            fit_baseline_model=True,
+            alphas=[best_alpha]
+        )
+        refit_model.fit(X, y)
+        return refit_model
+
+def run_coxnet_ridge(X, y, random_state=42):
+    from sksurv.linear_model import CoxnetSurvivalAnalysis
+    from sksurv.metrics import concordance_index_censored
+    from sklearn.model_selection import StratifiedKFold
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        initial_model = CoxnetSurvivalAnalysis(
+            l1_ratio=0.01,
+            fit_baseline_model=True,
+            n_alphas=100,
+            alpha_min_ratio=0.01
+        )
+        initial_model.fit(X, y)
+        candidate_alphas = initial_model.alphas_
+
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+        alpha_scores = {alpha: [] for alpha in candidate_alphas}
+        valid_folds = 0
+
+        for train_idx, val_idx in skf.split(X, y["Status"]):
+            X_tr, y_tr = X[train_idx], y[train_idx]
+            X_va, y_va = X[val_idx], y[val_idx]
+
+            try:
+                fold_model = CoxnetSurvivalAnalysis(
+                    l1_ratio=0.01,
+                    alphas=candidate_alphas,
+                    fit_baseline_model=False
+                )
+                fold_model.fit(X_tr, y_tr)
+
+                for alpha in candidate_alphas:
+                    risk = fold_model.predict(X_va, alpha=alpha)
+                    c_idx = concordance_index_censored(y_va["Status"], y_va["Survival_Time"], risk)[0]
+                    alpha_scores[alpha].append(c_idx)
+                valid_folds += 1
+            except Exception:
+                continue
+
+        if valid_folds == 0:
+            raise RuntimeError("All CV folds failed during Coxnet Ridge penalty tuning.")
+
+        mean_scores = {alpha: np.mean(scores) for alpha, scores in alpha_scores.items() if len(scores) > 0}
+        best_alpha = max(mean_scores, key=mean_scores.get)
+
+        refit_model = CoxnetSurvivalAnalysis(
+            l1_ratio=0.01,
+            fit_baseline_model=True,
+            alphas=[best_alpha]
+        )
+        refit_model.fit(X, y)
+        return refit_model
+
 def run_deepsurv(X, y, learning_rate=1e-3):
     """
     DeepSurv implementation with regularization to address Reviewer concerns about overfitting.
