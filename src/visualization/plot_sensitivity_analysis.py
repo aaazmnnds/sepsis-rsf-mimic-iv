@@ -17,71 +17,95 @@ def plot_sensitivity():
         print(f"Error: {filename} not found. Run survival_models.py first.")
         return
         
-    df = pd.read_csv(filename)
+    df = pd.read_csv(filename, dtype={"Missingness_Rate": str})
     
     # 2. Filter for primary analysis
-    plot_df = df[df["Metric"] == "C-index (Test)"].copy()
-    plot_df["Target_Rate"] = pd.to_numeric(plot_df["Missingness_Rate"])
+    plot_df = df[
+        (df["Metric"] == "C-index (CV)") & 
+        (df["Model"] == "RSF") & 
+        (df["Mechanism"].isin(["MAR", "MCAR", "MNAR"]))
+    ].copy()
+    plot_df["Missingness_Rate"] = pd.to_numeric(plot_df["Missingness_Rate"])
     plot_df["Imputation"] = plot_df["Imputation"].replace("MICE (pooled)", "MICE")
-    
-    # --- MAPPING TARGET TO ACTUAL RATES ---
-    # Target 10 -> 10.00%, Target 40 -> 40.01%, Target 55 -> 54.98%
-    rate_map = {10: 10.00, 40: 40.01, 55: 54.98}
-    plot_df["Actual_Rate"] = plot_df["Target_Rate"].map(rate_map).fillna(plot_df["Target_Rate"])
     
     # 3. Setup Aesthetic
     sns.set_style("white")
     plt.rcParams['font.sans-serif'] = ['Arial', 'Helvetica', 'sans-serif']
     
-    mechanisms = sorted(plot_df["Mechanism"].unique())
-    actual_rates = sorted(plot_df["Actual_Rate"].unique())
+    mechanisms = ["MAR", "MCAR", "MNAR"]
+    imputations = ["MICE", "missForest", "GAIN", "MIDA"]
     
-    fig, axes = plt.subplots(1, len(mechanisms), figsize=(20, 7), sharey=True)
-    if len(mechanisms) == 1: axes = [axes]
+    fig, axes = plt.subplots(1, len(mechanisms), figsize=(18, 6), sharey=True)
+    if len(mechanisms) == 1:
+        axes = [axes]
     
-    model_colors = {
-        "RSF": "#1F77B4", "XGBoost": "#FF7F0E", "GradientBoosting": "#2CA02C", "DeepSurv": "#D62728"
+    # Four distinct colors and markers
+    imp_styles = {
+        "MICE": {"color": "#1f77b4", "marker": "o"},
+        "missForest": {"color": "#2ca02c", "marker": "s"},
+        "GAIN": {"color": "#d62728", "marker": "^"},
+        "MIDA": {"color": "#9467bd", "marker": "D"}
     }
     
     for i, mech in enumerate(mechanisms):
         ax = axes[i]
         mech_data = plot_df[plot_df["Mechanism"] == mech]
-        if mech_data.empty: continue
-            
-        summary = mech_data.groupby(["Model", "Actual_Rate"])["Value"].agg(["mean", "std"]).reset_index()
         
-        for model in ["RSF", "XGBoost", "GradientBoosting", "DeepSurv"]:
-            m_data = summary[summary["Model"] == model]
-            if m_data.empty: continue
+        for imp in imputations:
+            imp_data = mech_data[mech_data["Imputation"] == imp].sort_values(by="Missingness_Rate")
+            if imp_data.empty:
+                continue
             
-            lw = 4 if model == "RSF" else 2
-            alpha = 1.0 if model == "RSF" else 0.6
-            z = 10 if model == "RSF" else 5
+            x_vals = imp_data["Missingness_Rate"].values
+            y_vals = imp_data["Value"].values
+            sd_vals = imp_data["CV_SD"].values
             
-            ax.plot(m_data["Actual_Rate"], m_data["mean"], 
-                    label=model, color=model_colors[model], 
-                    linewidth=lw, marker='o', markersize=8, alpha=alpha, zorder=z)
+            style = imp_styles[imp]
+            ax.plot(
+                x_vals, y_vals,
+                label=imp,
+                color=style["color"],
+                marker=style["marker"],
+                linewidth=2.2,
+                markersize=7,
+                alpha=0.9
+            )
             
-            ax.fill_between(m_data["Actual_Rate"], m_data["mean"] - m_data["std"], 
-                           m_data["mean"] + m_data["std"], 
-                           color=model_colors[model], alpha=0.1, zorder=z-1)
+            ax.fill_between(
+                x_vals,
+                y_vals - sd_vals,
+                y_vals + sd_vals,
+                color=style["color"],
+                alpha=0.08
+            )
         
-        ax.set_title(f"Mechanism: {mech}", fontsize=18, fontweight='bold', pad=20)
-        ax.set_xlabel("Actual Missingness Rate (%)", fontsize=14)
-        if i == 0: ax.set_ylabel("C-index (Mean \u00B1 SD)", fontsize=14)
+        ax.set_title(mech, fontsize=16, fontweight='bold', pad=12)
+        ax.set_xlabel("Overall missingness rate (%)", fontsize=13)
+        if i == 0:
+            ax.set_ylabel("Cross-validated C-index (mean, shaded: fold SD)", fontsize=13)
         
         ax.grid(True, linestyle=':', alpha=0.6)
-        ax.set_xticks(actual_rates + [26.8])
+        ax.set_xticks([10.0, 26.8, 40.01, 54.98])
         ax.set_ylim(0.4, 0.95)
         
-        # Restore Baseline Line
-        ax.axvline(x=26.8, color='#7F8C8D', linestyle='--', linewidth=2, alpha=0.8)
-        if i == 0:
-            ax.text(27.5, 0.42, "MIMIC-IV Baseline (26.8%)", rotation=90, color='#7F8C8D', fontsize=11, fontweight='bold')
+        # Vertical line at observed rate
+        ax.axvline(x=26.8, color='#7F8C8D', linestyle='--', linewidth=1.5, alpha=0.8)
+        ax.text(
+            27.5, 0.42, "MIMIC-IV rate (26.8%)",
+            rotation=90, color='#7F8C8D', fontsize=11, fontweight='bold'
+        )
 
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.05), fontsize=14, frameon=False)
-    plt.suptitle("Sensitivity Analysis: Model Robustness Across Missingness Rates", fontsize=22, fontweight='bold', y=1.05)
+    fig.legend(
+        handles, labels,
+        title="Imputation method",
+        loc='lower center',
+        ncol=4,
+        bbox_to_anchor=(0.5, -0.08),
+        fontsize=12,
+        title_fontsize=13,
+        frameon=False
+    )
     plt.tight_layout()
     
     out_name = os.path.join(RESULTS_DIR, "sensitivity_analysis_rsf.png")
