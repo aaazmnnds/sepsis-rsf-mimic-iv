@@ -1414,6 +1414,22 @@ def main():
             except Exception as e:
                 print(f"    Test Failed: {e}")
 
+            # Variable importance for Single Imputation RSF (real data only)
+            if is_real_data and model_name == "RSF" and model is not None and X_test_scaled is not None:
+                from sklearn.inspection import permutation_importance
+                result = permutation_importance(model, X_test_scaled, y_test, n_repeats=5, random_state=42)
+                vimp_feature_names = X_df_raw.columns if imputation_method in ["GAIN", "MIDA"] else X_df.columns
+                for idx, feature_name in enumerate(vimp_feature_names):
+                    vimp_records.append({
+                        "Imputation": imputation_method,
+                        "Mechanism": missing_mechanism,
+                        "Imputation_Idx": 1,
+                        "Model": "RSF",
+                        "Feature": feature_name,
+                        "Importance_Mean": result.importances_mean[idx],
+                        "Importance_Std": result.importances_std[idx]
+                    })
+
             # Add valid bootstrap CIs for real data groups
             if is_real_data and failed_folds > 0:
                 print(f"  WARNING: {failed_folds} fold(s) failed in {imputation_method} for {model_name}. Skipping CV-Pooled rows.")
