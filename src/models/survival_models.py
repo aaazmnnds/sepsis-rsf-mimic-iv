@@ -1322,6 +1322,19 @@ def main():
                         "CI_Upper": np.nan
                     })
 
+                    # Pooled out-of-fold RSF risk scores for training patients
+                    mean_oof_risk = np.mean(pooled_oof_mat, axis=0)
+                    for idx in range(len(last_y_train)):
+                        prediction_records.append({
+                            "Imputation": "MICE (pooled)",
+                            "Mechanism": mechanism,
+                            "Model": "RSF_OOF",
+                            "Index": idx,
+                            "Observed_Time": last_y_train[idx]["Survival_Time"],
+                            "Observed_Status": last_y_train[idx]["Status"],
+                            "Predicted_Risk": mean_oof_risk[idx]
+                        })
+
             # Checkpoint saving for MICE combination
             current_mice_records = [r for r in performance_records if r["Imputation"] == "MICE (pooled)" and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
             save_checkpoint(checkpoint_file, current_mice_records)
@@ -1841,6 +1854,19 @@ def main():
                         "CI_Lower": np.nan,
                         "CI_Upper": np.nan
                     })
+
+                    # Pooled out-of-fold RSF risk scores for training patients
+                    mean_oof_risk = np.mean(oof_mat, axis=0)
+                    for idx in range(len(y_train)):
+                        prediction_records.append({
+                            "Imputation": imputation_method,
+                            "Mechanism": missing_mechanism,
+                            "Model": "RSF_OOF",
+                            "Index": idx,
+                            "Observed_Time": y_train[idx]["Survival_Time"],
+                            "Observed_Status": y_train[idx]["Status"],
+                            "Predicted_Risk": mean_oof_risk[idx]
+                        })
 
             # Checkpoint saving for single file combination
             current_single_records = [r for r in performance_records if r["Imputation"] == imputation_method and r["Mechanism"] == mech_label and norm_rate(r["Missingness_Rate"]) == norm_rate(rate_label) and r["Model"] == model_name]
