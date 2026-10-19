@@ -1,88 +1,126 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from lifelines import KaplanMeierFitter
-from lifelines.statistics import logrank_test
+from sksurv.nonparametric import kaplan_meier_estimator
+from sksurv.compare import compare_survival
+from sksurv.util import Surv
 
 def generate_km_curves():
     print("=" * 80)
     print("GENERATING KAPLAN-MEIER CURVES FROM OOB PREDICTIONS")
     print("=" * 80)
 
-    # 1. LOAD PREDICTIONS
-    print("\n1. Loading unbiased OOB predictions...")
-    try:
-        df = pd.read_csv("full_cohort_rsf_predictions.csv")
-        print(f"   Loaded: full_cohort_rsf_predictions.csv (n={len(df)})")
-    except FileNotFoundError:
-        print("   ERROR: full_cohort_rsf_predictions.csv not found!")
-        print("   Please run 'python src/evaluation/generate_full_cohort_predictions.py' first.")
+    filename = "model_predictions.csv"
+    if not os.path.exists(filename):
+        print(f"Error: '{filename}' not found.")
         return
 
-    # 2. IDENTIFY DATA COLUMNS
-    T = df["Observed_Time"]
-    E = df["Observed_Status"]
-    groups = df["Risk_Group"]
+    df = pd.read_csv(filename)
+    df_oof = df[df["Model"] == "RSF_OOF"].copy()
+    if df_oof.empty:
+        print("Error: No RSF_OOF rows found in model_predictions.csv.")
+        return
 
-    # 3. STATISTICAL TEST (Log-Rank)
-    print("\n2. Calculating Log-Rank Test...")
-    mask_high = (groups == "High")
-    mask_low = (groups == "Low")
+    imputations = ["MICE (pooled)", "missForest", "GAIN", "MIDA"]
+    panel_titles = ["MICE", "missForest", "GAIN", "MIDA"]
+    eval_times = [0, 30, 60, 90, 120, 150]
 
-    results = logrank_test(T[mask_high], T[mask_low], event_observed_A=E[mask_high], event_observed_B=E[mask_low])
-    p_value = results.p_value
-    print(f"   Log-Rank p-value: {p_value:.4e}")
+    max_t = df_oof["Observed_Time"].max()
 
-    # 4. PLOTTING
-    print("\n3. Plotting KM Curves...")
-    plt.figure(figsize=(10, 7))
-    sns.set_style("whitegrid")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12), sharex=True, sharey=True)
+    fig.suptitle("Kaplan-Meier curves by median split of RSF out-of-fold risk scores (n=766 training patients)", fontsize=15, y=0.98)
 
-    kmf_high = KaplanMeierFitter()
-    kmf_low = KaplanMeierFitter()
+    for idx, (imp, title) in enumerate(zip(imputations, panel_titles)):
+        ax = axes[idx // 2, idx % 2]
+        sub = df_oof[df_oof["Imputation"] == imp].copy()
+        if len(sub) == 0:
+            print(f"Warning: No rows for imputation {imp}")
+            continue
 
-    # Plot High Risk
-    kmf_high.fit(T[mask_high], E[mask_high], label=f"High Risk (n={sum(mask_high)})")
-    ax = kmf_high.plot_survival_function(color="#e74c3c", linewidth=2.5) # Sleek red
+        median_val = sub["Predicted_Risk"].median()
+        high_mask = sub["Predicted_Risk"] >= median_val
+        low_mask = ~high_mask
 
-    # Plot Low Risk
-    kmf_low.fit(T[mask_low], E[mask_low], label=f"Low Risk (n={sum(mask_low)})")
-    kmf_low.plot_survival_function(ax=ax, color="#3498db", linewidth=2.5) # Sleek blue
+        high_df = sub[high_mask]
+        low_df = sub[low_mask]
 
-    # Formatting
-    plt.title("Risk Stratification for Sepsis Mortality (OOB Predictions)", fontsize=16, fontweight='bold', pad=20)
-    plt.xlabel("Days Post-Surgery", fontsize=12)
-    plt.ylabel("Survival Probability", fontsize=12)
-    plt.ylim(0, 1.05)
-    plt.xlim(0, max(T))
-    plt.legend(title="Risk Group", fontsize=11, frameon=True)
+        n_high = len(high_df)
+        events_high = int(high_df["Observed_Status"].sum())
+        n_low = len(low_df)
+        events_low = int(low_df["Observed_Status"].sum())
 
-    # Add p-value to plot
-    plt.text(0.05, 0.05, f"Log-Rank p < {p_value:.1e}" if p_value < 0.001 else f"Log-Rank p = {p_value:.3f}",
-             transform=ax.transAxes, fontsize=12, fontweight='bold', bbox=dict(facecolor='white', alpha=0.5))
+        y_surv = Surv.from_arrays(sub["Observed_Status"].astype(bool), sub["Observed_Time"])
+        group_indicator = high_mask.astype(int)
+        stat_res = compare_survival(y_surv, group_indicator)
+        if isinstance(stat_res, (tuple, list)):
+            p_val = stat_res[1]
+        else:
+            p_val = stat_res
 
-    # 5. SURVIVAL PROBABILITIES AT 30 & 60 DAYS
-    print("\n4. Survival Probabilities:")
-    for days in [30, 60]:
-        print(f"   At Day {days}:")
-        try:
-            surv_high = kmf_high.predict(days)
-            surv_low = kmf_low.predict(days)
-            print(f"     High Risk: {surv_high:.1%}")
-            print(f"     Low Risk:  {surv_low:.1%}")
-        except:
-             print(f"     Day {days} is outside observed range for some groups.")
+        p_str = f"Log-rank p = {p_val:.1e}"
 
-    # 6. SAVE
-    output_file = "survival_curves_all_subjects1.png"
-    plt.tight_layout()
-    plt.savefig(output_file, dpi=300)
-    print(f"\nSaved: {output_file}")
+        def get_surv_at(times, prob, t):
+            idx_t = np.where(times <= t)[0]
+            return prob[idx_t[-1]] if len(idx_t) > 0 else 1.0
 
-    print("\n" + "=" * 80)
-    print("KM CURVE GENERATION COMPLETE")
-    print("=" * 80)
+        for grp_df, label_prefix, color in [(high_df, f"High risk (n={n_high}, {events_high} events)", "red"),
+                                           (low_df, f"Low risk (n={n_low}, {events_low} events)", "blue")]:
+            ev = grp_df["Observed_Status"].astype(bool)
+            tm = grp_df["Observed_Time"]
+
+            try:
+                times, prob, conf_int = kaplan_meier_estimator(ev, tm, conf_type="log-log")
+                has_ci = True
+            except Exception as e:
+                print(f"Warning: conf_type='log-log' unsupported ({e}), plotting without bands.")
+                times, prob = kaplan_meier_estimator(ev, tm)
+                has_ci = False
+
+            ax.step(times, prob, where="post", color=color, label=label_prefix, linewidth=1.8)
+            if has_ci and conf_int is not None:
+                ax.fill_between(times, conf_int[0], conf_int[1], alpha=0.18, step="post", color=color)
+
+            censored_times = grp_df[grp_df["Observed_Status"] == 0]["Observed_Time"].values
+            if len(censored_times) > 0:
+                censored_probs = [get_surv_at(times, prob, ct) for ct in censored_times]
+                ax.scatter(censored_times, censored_probs, marker="|", color=color, s=25, zorder=3)
+
+            s30 = get_surv_at(times, prob, 30)
+            s60 = get_surv_at(times, prob, 60)
+            grp_name = "High" if color == "red" else "Low"
+            print(f"[{title}] {grp_name} risk: n={len(grp_df)}, events={grp_df['Observed_Status'].sum()}, Day 30 KM={s30:.4f}, Day 60 KM={s60:.4f}")
+
+        print(f"[{title}] {p_str}")
+
+        ax.set_title(title, fontsize=13, fontweight="bold")
+        ax.set_xlim(0, max_t)
+        ax.set_ylim(0, 1.05)
+        ax.legend(loc="lower left", fontsize=9, frameon=True)
+        ax.text(0.96, 0.94, p_str, transform=ax.transAxes, ha="right", va="top",
+                fontsize=10, bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8, edgecolor="gray"))
+
+        at_risk_high = [sum(high_df["Observed_Time"] >= t) for t in eval_times]
+        at_risk_low = [sum(low_df["Observed_Time"] >= t) for t in eval_times]
+
+        ax.text(-0.02, -0.16, "At risk:", transform=ax.transAxes, fontsize=8, fontweight="bold", ha="right")
+        ax.text(-0.02, -0.22, "High:", transform=ax.transAxes, fontsize=8, color="red", ha="right")
+        ax.text(-0.02, -0.28, "Low:", transform=ax.transAxes, fontsize=8, color="blue", ha="right")
+
+        for t_val, rh, rl in zip(eval_times, at_risk_high, at_risk_low):
+            x_norm = t_val / max_t
+            ax.text(x_norm, -0.16, str(t_val), transform=ax.transAxes, fontsize=8, ha="center", color="gray")
+            ax.text(x_norm, -0.22, str(rh), transform=ax.transAxes, fontsize=8, ha="center")
+            ax.text(x_norm, -0.28, str(rl), transform=ax.transAxes, fontsize=8, ha="center")
+
+        if idx % 2 == 0:
+            ax.set_ylabel("Survival probability", fontsize=11)
+        if idx // 2 == 1:
+            ax.set_xlabel("Days after admission", fontsize=11, labelpad=38)
+
+    plt.subplots_adjust(hspace=0.45, wspace=0.15, bottom=0.12, top=0.92)
+    plt.savefig("survival_curves_all_subjects1.png", dpi=300, bbox_inches="tight")
+    print("Saved 'survival_curves_all_subjects1.png'")
 
 if __name__ == "__main__":
     generate_km_curves()

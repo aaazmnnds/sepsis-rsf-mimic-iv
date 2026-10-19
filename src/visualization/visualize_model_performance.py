@@ -7,38 +7,52 @@ import glob
 def plot_performance_comparison():
     print("Generating Performance Comparison Plot...")
 
-    # Check if results file exists
-    if not glob.glob("model_performance_results.csv"):
-        print("Error: 'model_performance_results.csv' not found. Run survival_models.py first.")
+    if not glob.glob("model_performance_sensitivity_analysis.csv"):
+        print("Error: 'model_performance_sensitivity_analysis.csv' not found.")
         return
 
-    df = pd.read_csv("model_performance_results.csv")
+    df = pd.read_csv("model_performance_sensitivity_analysis.csv")
+    df_plot = df[df["Mechanism"].isin(["FULL", "MIMIC"]) & (df["Metric"] == "C-index (CV-Pooled)")].copy()
+    df_plot["Imputation"] = df_plot["Imputation"].replace({"MICE (pooled)": "MICE"})
 
-    # Filter for C-index (Test) or C-index (CV)
-    # Let's plot Test C-index for final comparison
-    df_test = df[df["Metric"] == "C-index (Test)"]
+    imputation_order = ["MICE", "missForest", "GAIN", "MIDA"]
+    model_order = ["RSF", "XGBoost", "GradientBoosting", "DeepSurv", "CoxnetElasticNet", "CoxnetRidge"]
+    legend_labels = ["RSF", "XGBoost", "Gradient Boosting", "DeepSurv", "Elastic-net Cox", "Ridge Cox"]
 
-    if df_test.empty:
-        # Fallback to CV mean if Test not available or just to show CV
-        df_test = df[df["Metric"] == "C-index (CV)"]
-        title_suffix = "(CV Mean)"
-    else:
-        title_suffix = "(Hold-out Test)"
+    n_groups = len(imputation_order)
+    n_models = len(model_order)
+    bar_width = 0.13
+    indices = np.arange(n_groups)
 
-    plt.figure(figsize=(12, 6))
-    sns.set_style("whitegrid")
+    fig, ax = plt.subplots(figsize=(14, 7))
+    palette = sns.color_palette("tab10", n_models)
 
-    # Bar plot: x=Imputation, y=Value, hue=Model
-    # We want to see how Imputation affects performance for each Model
-    # Or focus on RSF across imputations as per paper aim
+    for i, (model_name, label) in enumerate(zip(model_order, legend_labels)):
+        model_df = df_plot[df_plot["Model"] == model_name].set_index("Imputation").reindex(imputation_order).reset_index()
+        values = model_df["Value"].values
+        ci_lower = model_df["CI_Lower"].values
+        ci_upper = model_df["CI_Upper"].values
 
-    ax = sns.barplot(data=df_test, x="Imputation", y="Value", hue="Model", palette="viridis")
+        yerr_lower = values - ci_lower
+        yerr_upper = ci_upper - values
+        yerr = np.array([yerr_lower, yerr_upper])
 
-    plt.title(f"Model Discrimination Performance {title_suffix}", fontsize=14)
-    plt.ylabel("C-index", fontsize=12)
-    plt.xlabel("Imputation Method", fontsize=12)
-    plt.ylim(0.5, 1.0) # C-index scale
-    plt.legend(title="Model", loc="upper right")
+        offsets = indices + (i - (n_models - 1) / 2) * bar_width
+        bars = ax.bar(offsets, values, bar_width, label=label, color=palette[i],
+                      yerr=yerr, capsize=3, error_kw={"elinewidth": 1, "capthick": 1})
+
+        for bar, val in zip(bars, values):
+            if not np.isnan(val):
+                ax.text(bar.get_x() + bar.get_width() / 2, val + 0.005, f"{val:.3f}",
+                        ha="center", va="bottom", fontsize=7, rotation=0)
+
+    ax.set_ylim(0.5, 0.95)
+    ax.set_ylabel("Pooled out-of-fold C-index (95% bootstrap CI)", fontsize=12)
+    ax.set_xlabel("Imputation method", fontsize=12)
+    ax.set_title("Pooled out-of-fold C-index, real MIMIC-IV data", fontsize=14)
+    ax.set_xticks(indices)
+    ax.set_xticklabels(imputation_order, fontsize=11)
+    ax.legend(title="Model", loc="upper right", fontsize=8, title_fontsize=9, borderpad=0.3, labelspacing=0.3, handletextpad=0.4, handlelength=1.2)
 
     plt.tight_layout()
     plt.savefig("performance_comparison.png", dpi=300)
@@ -267,8 +281,8 @@ def plot_survival_curves():
     plt.ylim(0, 1.05)
 
     plt.tight_layout()
-    plt.savefig("survival_curves_all_subjects1.png", dpi=300)
-    print("Saved 'survival_curves_all_subjects1.png'")
+    plt.savefig("survival_curves_test_set_unused.png", dpi=300)
+    print("Saved 'survival_curves_test_set_unused.png'")
 
 
 if __name__ == "__main__":
