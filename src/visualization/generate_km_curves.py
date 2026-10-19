@@ -103,22 +103,24 @@ def generate_km_curves():
         at_risk_high = [sum(high_df["Observed_Time"] >= t) for t in eval_times]
         at_risk_low = [sum(low_df["Observed_Time"] >= t) for t in eval_times]
 
-        ax.text(-0.02, -0.16, "At risk:", transform=ax.transAxes, fontsize=8, fontweight="bold", ha="right")
-        ax.text(-0.02, -0.22, "High:", transform=ax.transAxes, fontsize=8, color="red", ha="right")
-        ax.text(-0.02, -0.28, "Low:", transform=ax.transAxes, fontsize=8, color="blue", ha="right")
+        ax.tick_params(labelbottom=True)
+        ax.set_xlabel("Days after admission", fontsize=11)
+
+        y_base = -0.22
+        ax.text(-0.04, y_base, "At risk:", transform=ax.transAxes, fontsize=8, fontweight="bold", ha="right", va="center")
+        ax.text(-0.04, y_base - 0.05, "High:", transform=ax.transAxes, fontsize=8, color="red", ha="right", va="center")
+        ax.text(-0.04, y_base - 0.10, "Low:", transform=ax.transAxes, fontsize=8, color="blue", ha="right", va="center")
 
         for t_val, rh, rl in zip(eval_times, at_risk_high, at_risk_low):
             x_norm = t_val / max_t
-            ax.text(x_norm, -0.16, str(t_val), transform=ax.transAxes, fontsize=8, ha="center", color="gray")
-            ax.text(x_norm, -0.22, str(rh), transform=ax.transAxes, fontsize=8, ha="center")
-            ax.text(x_norm, -0.28, str(rl), transform=ax.transAxes, fontsize=8, ha="center")
+            ax.text(x_norm, y_base, str(t_val), transform=ax.transAxes, fontsize=8, ha="center", va="center", color="gray")
+            ax.text(x_norm, y_base - 0.05, str(rh), transform=ax.transAxes, fontsize=8, ha="center", va="center")
+            ax.text(x_norm, y_base - 0.10, str(rl), transform=ax.transAxes, fontsize=8, ha="center", va="center")
 
         if idx % 2 == 0:
             ax.set_ylabel("Survival probability", fontsize=11)
-        if idx // 2 == 1:
-            ax.set_xlabel("Days after admission", fontsize=11, labelpad=38)
 
-    plt.subplots_adjust(hspace=0.45, wspace=0.15, bottom=0.12, top=0.92)
+    plt.subplots_adjust(hspace=0.60, wspace=0.15, bottom=0.18, top=0.92)
     plt.savefig("survival_curves_all_subjects1.png", dpi=300, bbox_inches="tight")
     print("Saved 'survival_curves_all_subjects1.png'")
 
