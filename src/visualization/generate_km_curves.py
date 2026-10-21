@@ -8,7 +8,7 @@ from sksurv.util import Surv
 
 def generate_km_curves():
     print("=" * 80)
-    print("GENERATING KAPLAN-MEIER CURVES FROM OOB PREDICTIONS")
+    print("GENERATING KAPLAN-MEIER CURVES FROM OUT-OF-FOLD PREDICTIONS")
     print("=" * 80)
 
     filename = "model_predictions.csv"
@@ -120,7 +120,7 @@ def generate_km_curves():
         if idx % 2 == 0:
             ax.set_ylabel("Survival probability", fontsize=11)
 
-    plt.subplots_adjust(hspace=0.60, wspace=0.15, bottom=0.18, top=0.92)
+    plt.subplots_adjust(hspace=0.60, wspace=0.15, bottom=0.20, top=0.92)
     plt.savefig("survival_curves_all_subjects1.png", dpi=300, bbox_inches="tight")
     print("Saved 'survival_curves_all_subjects1.png'")
 
