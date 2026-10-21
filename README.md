@@ -79,52 +79,11 @@ The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV 
 
 ## Reproduction Workflow
 
-### Step 1: Data Simulation (Sensitivity Analysis)
-Generate synthetic datasets at multiple missingness rates (10.00%, 26.8%, 40.01%, 54.98%) under MCAR, MAR, and MNAR mechanisms.
-```bash
-Rscript src/missingness/data_simulation.R
-```
-**Output:** Synthetic datasets in `Results sensitivity/` named `synthetic_[mechanism]_[rate].csv`.
+Data: MIMIC-IV requires PhysioNet credentialed access; data files are not in the repository. Extraction: src/data_loading/extract_mimic_data.py.
 
-### Step 2: Missing Data Imputation
-Apply GAIN, MIDA, MICE, and missForest to the synthetic datasets.
-```bash
-# R-based methods (MICE, missForest)
-Rscript src/missingness/imputation_r.R
+Run order: (1) src/missingness/data_simulation.R; (2) src/missingness/imputation_r.R (MICE, missForest); (3) src/missingness/imputation_python.py (GAIN, MIDA); (4) OMP_NUM_THREADS=1 python src/models/survival_models.py; (5) src/evaluation/statistical_tests.py (run from the Results sensitivity folder); (6) src/evaluation/extract_lactate_medians.py; (7) src/visualization scripts.
 
-# Python-based methods (GAIN, MIDA)
-python src/missingness/imputation_python.py
-```
-**Output:** Imputed datasets in `Results sensitivity/`.
-
-### Step 3: Train Survival Models & Sensitivity Evaluation
-Train RSF and benchmark models on all imputed datasets and evaluate performance across missingness rates.
-```bash
-python src/models/survival_models.py
-```
-**Output:** `model_performance_sensitivity_analysis.csv` and `model_performance_summary_sensitivity.csv`.
-
-### Step 4: Full Cohort Analysis (Primary Result)
-```bash
-# Generate RSF predictions on full cohort (MIMIC-IV)
-python src/evaluation/generate_full_cohort_predictions.py
-
-# Perform log-rank test and calculate survival probabilities
-Rscript src/evaluation/FINAL_publication_analysis.R
-```
-**Output:** 
-- `FINAL_logrank_test.csv` (p < 0.001)
-- `FINAL_survival_probabilities.csv` (30-day, 60-day survival)
-- Kaplan-Meier curves in `results/figures/`
-
-### Step 5: Generate Figures & Tables
-```bash
-# Sensitivity analysis plot
-python src/visualization/plot_sensitivity_analysis.py
-
-# Data visualizations and VIMP
-python src/evaluation/generate_publication_tables.py
-```
+Note: set OMP_NUM_THREADS=1 to avoid a native threading crash on macOS; random seed 42 is set in each script.
 
 ---
 

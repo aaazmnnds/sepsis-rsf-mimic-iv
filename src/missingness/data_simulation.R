@@ -6,7 +6,10 @@ library(mice)
 set.seed(42)
 
 # Output Configuration
-ROOT_DIR <- "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+ROOT_DIR <- Sys.getenv("SEPSIS_ROOT", unset = NA)
+if (is.na(ROOT_DIR) || ROOT_DIR == "") {
+  ROOT_DIR <- normalizePath(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE))), "..", ".."))
+}
 output_dir <- file.path(ROOT_DIR, "Results sensitivity")
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -54,12 +57,25 @@ data1$AST <- data1$ALT + 0.5 * rnorm(n, mean = 0, sd = 1)
 
 # Survival outcomes
 # Time-to-event (Survival_Time): Exponential
-data1$Survival_Time <- rexp(n, rate = 0.02)
+# FIX: Strengthen Cox signal to match real MIMIC-IV discrimination
+lp <- 0.8 * scale(data1$Lac)[, 1] +
+      (-1.0) * scale(data1$GCS)[, 1] +
+      0.5 * scale(data1$HR)[, 1] +
+      0.5 * scale(data1$RR)[, 1] +
+      0.4 * scale(data1$Age)[, 1] +
+      (-0.5) * scale(data1$Plt)[, 1]
 
-# Event indicator (Status): Binary
-data1$Status <- rbinom(n, 1, 0.069)
+baseline_hazard <- 0.02
+hazard <- baseline_hazard * exp(lp)
+data1$Survival_Time <- rexp(n, rate = hazard)
+data1$Status <- rbinom(n, 1, prob = plogis(lp - 3.2))
 
-# Ensure logical bounds (e.g., GCS between 3 and 15, Age > 0)
+# Verify signal strength
+cat(sprintf("Event rate: %.3f\n", mean(data1$Status)))
+cat(sprintf("Lac-outcome correlation: %.3f\n", 
+    cor(data1$Lac, data1$Status)))
+cat(sprintf("GCS-outcome correlation: %.3f\n", 
+    cor(data1$GCS, data1$Status)))
 data1$GCS <- pmin(pmax(round(data1$GCS), 3), 15)
 data1$Age <- pmax(data1$Age, 18) # Assume adult cohort
 data1$RR <- pmax(data1$RR, 0)
@@ -205,7 +221,8 @@ for (target_rate in target_rates) {
     
     # 2. Verify achieved rate
     # Total cells = N * 13 (Age, Sex, ALT, AST, Lac, Na, Cl, Plt, HR, RR, GCS, Time, Event)
-    actual_rate <- mean(is.na(data_miss[, c("Age", "Sex", "ALT", "AST", "Lac", "Na", "Cl", "Plt", "HR", "RR", "GCS", "Time", "Event")]))
+    # FIX R1.8/R2.5: Remove Time and Event from missingness verification
+    actual_rate <- mean(is.na(data_miss[, c("Age", "ALT", "AST", "Lac", "Na", "Cl", "Plt", "HR", "RR", "GCS")]))
     
     # 3. Save file with rate-specific naming
     # Use '26.8' for baseline, others as integers for cleaner naming

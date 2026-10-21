@@ -807,7 +807,7 @@ def save_checkpoint(checkpoint_file, new_records):
 # ----------------------------------------------------------------------------
 def main():
     # Absolute Root Configuration
-    ROOT_DIR = "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     RESULTS_DIR = os.path.join(ROOT_DIR, "Results sensitivity")
     checkpoint_file = os.path.join(RESULTS_DIR, "model_performance_sensitivity_analysis.csv")
     

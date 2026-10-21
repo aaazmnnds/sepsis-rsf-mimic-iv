@@ -11,13 +11,25 @@ library(tidyverse)
 run_mice <- function(data, output_prefix, m = 5, maxit = 20, seed = 123) {
   message("Running MICE imputation...")
 
-  # Run MICE with Random Forest method
+  # FIX: Define columns to exclude from imputation (outcomes and IDs)
+  EXCLUDE_COLS <- c("subject_id", "hadm_id", "Time", "Event", 
+                    "Survival_Time", "Status")
+  feature_cols <- setdiff(names(data), EXCLUDE_COLS)
+  data_features <- data[, feature_cols]
+
+  # Run MICE with Random Forest method on clinical features only
   # Note: remove.collinear=FALSE is crucial here because some variables (e.g., AST/ALT) are highly correlated
-  imp <- mice(data, m = m, maxit = maxit, method = "rf", seed = seed, print = FALSE, remove.collinear = FALSE)
+  imp <- mice(data_features, m = m, maxit = maxit, method = "rf", seed = seed, print = FALSE, remove.collinear = FALSE)
 
   # Save each of the m=5 imputed datasets separately
   for (i in 1:m) {
     imputed_data <- complete(imp, i)
+    # Re-attach outcome and ID columns after imputation
+    for (col in EXCLUDE_COLS) {
+      if (col %in% names(data)) {
+        imputed_data[[col]] <- data[[col]]
+      }
+    }
     filename <- paste0("mice", i, "_", output_prefix, ".csv")
     full_path <- file.path(output_dir, filename)
     write.csv(imputed_data, full_path, row.names = FALSE)
@@ -30,17 +42,34 @@ run_missforest <- function(data, seed = 123) {
   message("Running missForest imputation...")
   set.seed(seed)
 
+  # FIX: Define columns to exclude from imputation (outcomes and IDs)
+  EXCLUDE_COLS <- c("subject_id", "hadm_id", "Time", "Event", 
+                    "Survival_Time", "Status")
+  feature_cols <- setdiff(names(data), EXCLUDE_COLS)
+  data_features <- data[, feature_cols]
+
   # Convert character columns to factors (missForest requirement)
-  data_converted <- data
+  data_converted <- data_features
   char_cols <- sapply(data_converted, is.character)
   data_converted[char_cols] <- lapply(data_converted[char_cols], as.factor)
 
   imp <- missForest(data_converted)
-  return(imp$ximp)
+  imputed_data <- imp$ximp
+
+  # Re-attach outcome and ID columns after imputation
+  for (col in EXCLUDE_COLS) {
+    if (col %in% names(data)) {
+      imputed_data[[col]] <- data[[col]]
+    }
+  }
+  return(imputed_data)
 }
 
 # Output Configuration
-ROOT_DIR <- "/Users/nazu.ds/Documents/Research Collections/Dr. Zhang/Content/Application of Random Survival Forests for the Analysis of Sepsis After Laparoscopic Surgery/Revised paper/Revised 1"
+ROOT_DIR <- Sys.getenv("SEPSIS_ROOT", unset = NA)
+if (is.na(ROOT_DIR) || ROOT_DIR == "") {
+  ROOT_DIR <- normalizePath(file.path(dirname(sub("--file=", "", grep("--file=", commandArgs(), value = TRUE))), "..", ".."))
+}
 data_dir <- file.path(ROOT_DIR, "Results sensitivity")
 output_dir <- file.path(ROOT_DIR, "Results sensitivity")
 dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)

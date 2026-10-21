@@ -2,32 +2,31 @@ import pandas as pd
 import numpy as np
 
 def format_cont(series):
-    # Check for normality? Simplified: Report Mean (SD) for Age, Median [IQR] for others
-    # Actually paper said: "means ± standard deviations for normally distributed... medians [interquartile ranges] for non-normal"
-    # We will assume Age is normal, others are skewed (common in sepsis)
-
+    # Age as mean (SD); other variables as median [Q1, Q3] of observed values (dropna)
+    s = series.dropna()
     if series.name == "Age":
-        return f"{series.mean():.1f} ({series.std():.1f})"
+        return f"{s.mean():.1f} ({s.std():.1f})"
     else:
-        q1 = series.quantile(0.25)
-        q3 = series.quantile(0.75)
-        return f"{series.median():.1f} [{q1:.1f}, {q3:.1f}]"
+        q1 = s.quantile(0.25)
+        q3 = s.quantile(0.75)
+        return f"{s.median():.1f} [{q1:.1f}, {q3:.1f}]"
 
 def generate_table1():
     print("Loading data...")
+    data_path = "../data/raw/mimic_sepsis_cohort_full.csv"
     try:
-        df = pd.read_csv("synthetic_complete.csv")
+        df = pd.read_csv(data_path)
     except FileNotFoundError:
-        print("Error: synthetic_complete.csv not found.")
+        print(f"Error: {data_path} not found.")
         return
 
     # Total N
     n_total = len(df)
 
-    # Sex
-    n_male = df["Sex"].value_counts().get("M", 0)
+    # Sex: 1 = male, 0 = female
+    n_male = (df["Sex"] == 1).sum()
     p_male = (n_male / n_total) * 100
-    n_female = df["Sex"].value_counts().get("F", 0)
+    n_female = (df["Sex"] == 0).sum()
     p_female = (n_female / n_total) * 100
 
     # Define variables and display names
@@ -46,11 +45,9 @@ def generate_table1():
         "Survival_Time": "Length of Stay (days)"
     }
 
-    # Mappings if columns strictly match CSV headers (Assume they do from head command earlier)
-    # Earlier head: Age,ALT,Sex,HR,RR,GCS,Cl,Lac,Plt,Na,AST,Time,Event
-
-    # Rename for easier access
-    if "Time" in df.columns: df.rename(columns={"Time": "Survival_Time"}, inplace=True)
+    # Rename Time to Survival_Time if present
+    if "Time" in df.columns:
+        df.rename(columns={"Time": "Survival_Time"}, inplace=True)
 
     rows = []
 
@@ -76,7 +73,7 @@ def generate_table1():
 
     # 4. Outcomes
     rows.append(r"\multicolumn{2}{l}{\textbf{Outcomes}} \\")
-    n_dead = df["Event"].sum()
+    n_dead = (df["Event"] == 1).sum()
     p_dead = (n_dead / n_total) * 100
     rows.append(f"In-hospital Mortality, n (\%) & {n_dead} ({p_dead:.1f}) \\\\")
     rows.append(f"Length of Stay (days) & {format_cont(df['Survival_Time'])} \\\\")
