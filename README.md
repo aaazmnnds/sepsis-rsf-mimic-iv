@@ -37,8 +37,6 @@ This study compares random survival forests (RSF) with XGBoost, DeepSurv, compon
 │   ├── figures/               # Generated plots and figures
 │   ├── tables/                # CSV tables for manuscript
 │   └── predictions/           # Model survival probabilities
-├── scripts/                   # Helper shell scripts
-├── docs/                      # Documentation and guides
 ├── requirements.txt           # Python dependencies
 └── README.md                  # This file
 ````
@@ -64,7 +62,7 @@ pip install -r requirements.txt
 The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV v2.2**. 
 - MIMIC-IV data available at **PhysioNet**: [https://physionet.org/content/mimiciv/2.2/](https://physionet.org/content/mimiciv/2.2/)
 - Users must complete CITI training and request access via PhysioNet.
-- Follow the extraction guide in `docs/MIMIC_IV_data_extraction.md` for local setup.
+- Extraction script: `src/data_loading/extract_mimic_data.py`.
 
 ---
 
