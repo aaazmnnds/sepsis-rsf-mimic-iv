@@ -106,42 +106,114 @@ def plot_calibration_curves():
         print("Error: 'model_predictions.csv' not found. Run survival_models.py first.")
         return
 
+    from sksurv.nonparametric import kaplan_meier_estimator
+
     df_preds = pd.read_csv("model_predictions.csv")
+    df_s30 = df_preds[df_preds["Model"] == "RSF_OOF_S30"].copy()
 
-    # Focus on RSF model for calibration plot (Primary Method)
-    df_rsf = df_preds[df_preds["Model"] == "RSF"]
-
-    if df_rsf.empty:
-        print("No predictions found for RSF.")
+    if df_s30.empty:
+        print("Error: No predictions found for Model == 'RSF_OOF_S30'.")
         return
 
-    plt.figure(figsize=(8, 8))
+    imputation_panels = [
+        ("MICE (pooled)", "MICE"),
+        ("missForest", "missForest"),
+        ("GAIN", "GAIN"),
+        ("MIDA", "MIDA")
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10), sharex=True, sharey=True)
     sns.set_style("whitegrid")
 
-    # Plotting calibration is complex for survival (time-dependent).
-    # Simple approach for visualization script:
-    # Stratify predicted risk into deciles and plot Mean Predicted Risk vs Observed Event Rate
-    # (Note: This is a simplified proxy for visual check, rigor required Brier Score which we calculated numerically)
+    for idx, (imp_name, panel_title) in enumerate(imputation_panels):
+        ax = axes[idx // 2, idx % 2]
+        df_imp = df_s30[df_s30["Imputation"] == imp_name].copy()
 
-    # Create Deciles
-    df_rsf["Risk_Decile"] = pd.qcut(df_rsf["Predicted_Risk"], 10, labels=False)
+        if len(df_imp) != 766:
+            print(f"Warning: Expected 766 rows for '{imp_name}', found {len(df_imp)} rows.")
 
-    calibration_data = df_rsf.groupby("Risk_Decile").agg({
-        "Predicted_Risk": "mean",
-        "Observed_Status": "mean" # Mean event rate (approximate probability)
-    }).reset_index()
+        print(f"\n--- Calibration Group Values: {panel_title} ({imp_name}) ---")
 
-    plt.plot([0, 1], [0, 1], "k--", label="Perfect Calibration")
-    plt.plot(calibration_data["Predicted_Risk"], calibration_data["Observed_Status"], "o-", label="RSF (Risk Deciles)", color="blue")
+        if df_imp.empty:
+            ax.set_title(panel_title, fontsize=13, fontweight="bold")
+            continue
 
-    plt.title("Calibration Plot (RSF Risk Score vs Event Rate)", fontsize=14)
-    plt.xlabel("Predicted Risk (Mean)", fontsize=12)
-    plt.ylabel("Observed Event Rate", fontsize=12)
-    plt.legend()
+        # Split patients into 5 quantile groups of predicted survival
+        df_imp["Quantile_Group"] = pd.qcut(df_imp["Predicted_Risk"], q=5, labels=False, duplicates="drop")
+
+        pred_means = []
+        obs_kms = []
+        err_lowers = []
+        err_uppers = []
+
+        for q_idx in sorted(df_imp["Quantile_Group"].unique()):
+            grp_df = df_imp[df_imp["Quantile_Group"] == q_idx]
+            x_mean = float(grp_df["Predicted_Risk"].mean())
+
+            event = grp_df["Observed_Status"].values.astype(bool)
+            time = grp_df["Observed_Time"].values.astype(float)
+
+            try:
+                res = kaplan_meier_estimator(event, time, conf_type="log-log")
+                if len(res) == 3:
+                    km_times, km_probs, conf_int = res
+                else:
+                    km_times, km_probs = res
+                    conf_int = None
+            except Exception:
+                km_times, km_probs = kaplan_meier_estimator(event, time)
+                conf_int = None
+
+            if len(km_times) == 0 or 30.0 < km_times[0]:
+                y_km = 1.0
+                ci_l = 1.0
+                ci_u = 1.0
+            elif 30.0 >= km_times[-1]:
+                y_km = float(km_probs[-1])
+                ci_l = float(conf_int[0][-1]) if conf_int is not None else np.nan
+                ci_u = float(conf_int[1][-1]) if conf_int is not None else np.nan
+            else:
+                idx_30 = np.where(km_times <= 30.0)[0][-1]
+                y_km = float(km_probs[idx_30])
+                ci_l = float(conf_int[0][idx_30]) if conf_int is not None else np.nan
+                ci_u = float(conf_int[1][idx_30]) if conf_int is not None else np.nan
+
+            pred_means.append(x_mean)
+            obs_kms.append(y_km)
+
+            if not np.isnan(ci_l) and not np.isnan(ci_u):
+                err_lower = max(0.0, y_km - ci_l)
+                err_upper = max(0.0, ci_u - y_km)
+                err_lowers.append(err_lower)
+                err_uppers.append(err_upper)
+                print(f"Group {q_idx + 1}: n={len(grp_df)}, Predicted={x_mean:.4f}, Observed KM={y_km:.4f} (95% CI: {ci_l:.4f} - {ci_u:.4f})")
+            else:
+                err_lowers.append(0.0)
+                err_uppers.append(0.0)
+                print(f"Group {q_idx + 1}: n={len(grp_df)}, Predicted={x_mean:.4f}, Observed KM={y_km:.4f} (No CI)")
+
+        # Plot dashed y=x line
+        ax.plot([0.5, 1.0], [0.5, 1.0], "k--", alpha=0.7, label="Ideal")
+
+        # Plot points with error bars
+        has_ci = any(l > 0 or u > 0 for l, u in zip(err_lowers, err_uppers))
+        if has_ci:
+            yerr = [err_lowers, err_uppers]
+            ax.errorbar(pred_means, obs_kms, yerr=yerr, fmt="o", color="#1f77b4", ecolor="gray", elinewidth=1.2, capsize=3, markersize=6, label="RSF quantile groups")
+        else:
+            ax.plot(pred_means, obs_kms, "o", color="#1f77b4", markersize=6, label="RSF quantile groups")
+
+        ax.set_title(panel_title, fontsize=13, fontweight="bold")
+        ax.set_xlim(0.5, 1.0)
+        ax.set_ylim(0.5, 1.0)
+        ax.legend(loc="lower right", fontsize=9)
+
+    for i in range(2):
+        axes[1, i].set_xlabel("Predicted 30-day survival (mean per group)", fontsize=11)
+        axes[i, 0].set_ylabel("Observed 30-day survival (Kaplan-Meier)", fontsize=11)
 
     plt.tight_layout()
-    plt.tight_layout()
-    plt.savefig("calibration_curve_proxy.png", dpi=300)
+    plt.savefig("calibration_curve_proxy.png", dpi=300, bbox_inches="tight")
     print("Saved 'calibration_curve_proxy.png'")
 
 
