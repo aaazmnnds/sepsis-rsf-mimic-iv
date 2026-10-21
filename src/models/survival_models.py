@@ -262,7 +262,7 @@ def run_deepsurv(X, y, learning_rate=1e-3):
 # ----------------------------------------------------------------------------
 def run_cv_evaluation(model_func, X, y, model_name="Model", 
                       n_splits=10, random_state=42, 
-                      n_repeats=5, return_oof=False, **kwargs):
+                      n_repeats=5, return_oof=False, save_s30=False, **kwargs):
     """
     Repeated stratified k-fold cross-validation.
     n_repeats=5 runs 5 independent 10-fold CV iterations
@@ -271,6 +271,7 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
     all_fold_scores = []
     repeat_means = []
     oof_predictions = []
+    oof_s30_predictions = []
     failed_folds_count = 0
     
     for repeat in range(n_repeats):
@@ -312,9 +313,31 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
                 fold_scores.append(c)
                 all_fold_scores.append(c)
 
-                if return_oof:
+                if return_oof or save_s30:
                     for p_idx, score in zip(val_idx, risk_scores):
                         oof_predictions.append((repeat, int(p_idx), float(score)))
+
+                if save_s30 and model_name == "RSF":
+                    surv_funcs = model.predict_survival_function(X_fold_val_scaled)
+                    for p_idx, fn in zip(val_idx, surv_funcs):
+                        if hasattr(fn, "x") and hasattr(fn, "y"):
+                            if 30.0 > fn.x[-1]:
+                                s30 = float(fn.y[-1])
+                            elif 30.0 < fn.x[0]:
+                                s30 = 1.0
+                            else:
+                                s30 = float(fn(30.0))
+                        else:
+                            try:
+                                s30 = float(fn(30.0))
+                            except ValueError:
+                                if hasattr(fn, "domain") and 30.0 > fn.domain[1]:
+                                    s30 = float(fn(fn.domain[1]))
+                                elif hasattr(fn, "domain") and 30.0 < fn.domain[0]:
+                                    s30 = 1.0
+                                else:
+                                    raise
+                        oof_s30_predictions.append((repeat, int(p_idx), s30))
             except Exception as e:
                 failed_folds_count += 1
                 print(f"WARNING: Fold evaluation failed - Repeat {repeat+1}, Fold {fold_num}, Val Patients {len(val_idx)}, Error: {e}")
@@ -330,6 +353,8 @@ def run_cv_evaluation(model_func, X, y, model_name="Model",
     print(f"    Overall Mean CV C-index ({n_repeats}x{n_splits}-fold): "
           f"{overall_mean:.4f} (+/- {overall_std:.4f})")
     
+    if save_s30:
+        return all_fold_scores, repeat_means, oof_predictions, failed_folds_count, oof_s30_predictions
     if return_oof:
         return all_fold_scores, repeat_means, oof_predictions, failed_folds_count
     return all_fold_scores, repeat_means
@@ -876,6 +901,7 @@ def main():
             test_auc_estimates = {3.0: [], 7.0: [], 14.0: []} # Storage for AUCs
             pooled_risk_scores = None
             mice_oof_imputations = []
+            mice_oof_s30_imputations = []
             last_X_train, last_y_train, last_model, last_X_test_scaled = None, None, None, None
 
             for i, file_path in enumerate(sorted(mice_files), 1):
@@ -897,10 +923,20 @@ def main():
 
                 # CV
                 is_real_data = ("mimic" in mechanism.lower() or mechanism.lower() == "full")
+                save_s30_flag = (is_real_data and model_name == "RSF")
                 if is_real_data:
-                    all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
-                        model_func, X_train, y_train, 
-                        model_name=model_name, n_repeats=5, return_oof=is_real_data)
+                    if save_s30_flag:
+                        all_fold_scores, repeat_means, oof_predictions, failed_folds, oof_s30_predictions = run_cv_evaluation(
+                            model_func, X_train, y_train, 
+                            model_name=model_name, n_repeats=5, return_oof=is_real_data, save_s30=True)
+                        oof_s30_mat = np.zeros((5, len(y_train)))
+                        for r, p_idx, s30_val in oof_s30_predictions:
+                            oof_s30_mat[r, p_idx] = s30_val
+                        mice_oof_s30_imputations.append(oof_s30_mat)
+                    else:
+                        all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
+                            model_func, X_train, y_train, 
+                            model_name=model_name, n_repeats=5, return_oof=is_real_data)
                     if failed_folds > 0:
                         print(f"WARNING: {failed_folds} fold(s) failed in MICE imputation {i} for {model_name}.")
                     oof_mat = np.zeros((5, len(y_train)))
@@ -1343,6 +1379,19 @@ def main():
                             "Observed_Status": last_y_train[idx]["Status"],
                             "Predicted_Risk": mean_oof_risk[idx]
                         })
+                    if len(mice_oof_s30_imputations) == m and total_mice_failed_folds == 0:
+                        pooled_oof_s30_mat = np.mean(mice_oof_s30_imputations, axis=0)
+                        mean_oof_s30 = np.mean(pooled_oof_s30_mat, axis=0)
+                        for idx in range(len(last_y_train)):
+                            prediction_records.append({
+                                "Imputation": "MICE (pooled)",
+                                "Mechanism": mechanism,
+                                "Model": "RSF_OOF_S30",
+                                "Index": idx,
+                                "Observed_Time": last_y_train[idx]["Survival_Time"],
+                                "Observed_Status": last_y_train[idx]["Status"],
+                                "Predicted_Risk": mean_oof_s30[idx]
+                            })
 
             # Log Coxnet selected alphas and refit coefficients
             if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
@@ -1484,10 +1533,20 @@ def main():
             print(f"  [{model_name}]")
             # CV
             is_real_data = ("mimic" in missing_mechanism.lower() or missing_mechanism.lower() == "full")
+            save_s30_flag = (is_real_data and model_name == "RSF")
+            oof_s30_mat = None
             if is_real_data:
-                all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
-                    model_func, X_train, y_train,
-                    model_name=model_name, n_repeats=5, return_oof=is_real_data)
+                if save_s30_flag:
+                    all_fold_scores, repeat_means, oof_predictions, failed_folds, oof_s30_predictions = run_cv_evaluation(
+                        model_func, X_train, y_train,
+                        model_name=model_name, n_repeats=5, return_oof=is_real_data, save_s30=True)
+                    oof_s30_mat = np.zeros((5, len(y_train)))
+                    for r, p_idx, s30_val in oof_s30_predictions:
+                        oof_s30_mat[r, p_idx] = s30_val
+                else:
+                    all_fold_scores, repeat_means, oof_predictions, failed_folds = run_cv_evaluation(
+                        model_func, X_train, y_train,
+                        model_name=model_name, n_repeats=5, return_oof=is_real_data)
                 if failed_folds > 0:
                     print(f"WARNING: {failed_folds} fold(s) failed in {imputation_method} for {model_name}.")
                 oof_mat = np.zeros((5, len(y_train)))
@@ -1918,6 +1977,18 @@ def main():
                             "Observed_Status": y_train[idx]["Status"],
                             "Predicted_Risk": mean_oof_risk[idx]
                         })
+                    if save_s30_flag and oof_s30_mat is not None and failed_folds == 0:
+                        mean_oof_s30 = np.mean(oof_s30_mat, axis=0)
+                        for idx in range(len(y_train)):
+                            prediction_records.append({
+                                "Imputation": imputation_method,
+                                "Mechanism": missing_mechanism,
+                                "Model": "RSF_OOF_S30",
+                                "Index": idx,
+                                "Observed_Time": y_train[idx]["Survival_Time"],
+                                "Observed_Status": y_train[idx]["Status"],
+                                "Predicted_Risk": mean_oof_s30[idx]
+                            })
 
             # Log Coxnet selected alphas and refit coefficients
             if model_name in ["CoxnetElasticNet", "CoxnetRidge"]:
