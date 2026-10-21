@@ -5,19 +5,17 @@
 
 ## Overview
 
-This repository contains the complete code and data for the manuscript:
+This repository contains the analysis code for the manuscript:
 
 **"Survival Analysis of Sepsis After Laparoscopic Surgery Using Random Survival Forests: A MIMIC-IV Database Study with Methodological Validation"**
 
 ### Methodology Summary
-This study implements a robust machine learning pipeline centered on **Random Survival Forests (RSF)** to predict postoperative sepsis. A key methodological focus is the rigorous comparison of multiple imputation frameworks (GAIN, MIDA, MICE, missForest) specifically tailored for survival outcomes in surgical intensive care settings.
+This study compares random survival forests (RSF) with XGBoost, DeepSurv, component-wise gradient boosting, and elastic-net and ridge Cox models under four imputation methods (MICE, missForest, GAIN, MIDA), in MIMIC-IV and in simulated data with MCAR, MAR, and MNAR missingness.
 
 ### Key Features
-- **Random Survival Forest (RSF)** implementation for postoperative sepsis prediction
-- Comprehensive comparison of **4 imputation methods**: MICE, missForest, GAIN, MIDA
-- Benchmark against **3 ML models**: XGBoost, DeepSurv, Component-wise Gradient Boosting
-- **Full cohort analysis** (n=852) with perfect risk stratification (log-rank p < 0.001)
-- **Simulation study** validating robustness across MCAR, MAR, and MNAR mechanisms
+- Comparison of 6 survival models: RSF, XGBoost, DeepSurv, component-wise gradient boosting, elastic-net Cox, ridge Cox
+- Comparison of 4 imputation methods: MICE, missForest, GAIN, MIDA
+- Repeated 5x10-fold cross-validation, bootstrap confidence intervals, calibration, and a simulation study (MCAR, MAR, MNAR)
 
 ---
 
@@ -39,7 +37,6 @@ This study implements a robust machine learning pipeline centered on **Random Su
 │   ├── figures/               # Generated plots and figures
 │   ├── tables/                # CSV tables for manuscript
 │   └── predictions/           # Model survival probabilities
-├── notebook/                  # Jupyter notebooks for exploratory analysis
 ├── scripts/                   # Helper shell scripts
 ├── docs/                      # Documentation and guides
 ├── requirements.txt           # Python dependencies
@@ -62,12 +59,6 @@ install.packages(c("survival", "randomForestSRC", "mice", "missForest", "dplyr",
 pip install -r requirements.txt
 ```
 
-Or use conda:
-```bash
-conda env create -f environment.yml
-conda activate sepsis-rsf
-```
-
 ### Data Availability
 
 The primary dataset (`mimic_sepsis_cohort_full.csv`) is derived from **MIMIC-IV v2.2**. 
@@ -84,44 +75,6 @@ Data: MIMIC-IV requires PhysioNet credentialed access; data files are not in the
 Run order: (1) src/missingness/data_simulation.R; (2) src/missingness/imputation_r.R (MICE, missForest); (3) src/missingness/imputation_python.py (GAIN, MIDA); (4) OMP_NUM_THREADS=1 python src/models/survival_models.py; (5) src/evaluation/statistical_tests.py (run from the Results sensitivity folder); (6) src/evaluation/extract_lactate_medians.py; (7) src/visualization scripts.
 
 Note: set OMP_NUM_THREADS=1 to avoid a native threading crash on macOS; random seed 42 is set in each script.
-
----
-
-## Key Results
-
-### Primary Analysis (MIMIC-IV, n=852)
-
-| Model | Imputation | CV C-index (95% CI) | Test C-index | IBS |
-|-------|-----------|---------------------|--------------|-----|
-| **RSF** | **GAIN** | **0.819 (0.755-0.882)** | **0.754** | **0.104** |
-| RSF | missForest | 0.810 (0.745-0.875) | 0.710 | 0.105 |
-| Gradient Boosting | missForest | 0.790 (0.725-0.854) | 0.795 | 0.105 |
-| XGBoost | MICE | 0.745 (0.533-0.957) | 0.562 | — |
-
-### Risk Stratification (Full Cohort)
-
-- **Perfect separation:** All 59 mortality events in high-risk group (n=426)
-- **Log-rank test:** p < 0.001
-- **30-day survival:** 79.4% (high-risk) vs 100% (low-risk)
-- **60-day survival:** 66.7% (high-risk) vs 100% (low-risk)
-
-### Sensitivity Analysis (Robustness across Missingness)
-
-Evaluation of RSF C-index across target missingness rates (10.00% to 54.98%):
-
-| Mechanism | Imputation | 10.00% | 26.8% | 40.01% | 54.98% |
-|-----------|------------|--------|-------|--------|--------|
-| **MCAR**  | GAIN       | 0.729  | 0.765 | 0.958  | 0.971  |
-| **MAR**   | GAIN       | 0.778  | 0.886 | 0.961  | 0.984  |
-| **MNAR**  | GAIN       | 0.696  | 0.922 | 0.873  | 0.977  |
-
-*Results demonstrate that deep learning-based imputers (GAIN/MIDA) maintain or improve RSF performance as missingness increases by capturing underlying clinical patterns.*
-
-### Top Predictors (Variable Importance)
-
-1. **Platelet Count** (0.1383 ± 0.0463)
-2. **Glasgow Coma Scale** (0.0552 ± 0.0142)
-3. **Lactate** (0.0281 ± 0.0173)
 
 ---
 
